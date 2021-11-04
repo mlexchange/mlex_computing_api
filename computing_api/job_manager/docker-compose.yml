@@ -1,0 +1,25 @@
+version: '3'
+
+services:
+  job-service:
+    restart: 'unless-stopped'
+    container_name: 'job-service'
+    user: '${UID}:${GID}'
+    build:
+      context: 'job_manager'
+      dockerfile: 'docker/Dockerfile'
+    command: 'python src/main.py'
+    depends_on:
+      - 'mongo'
+    ports:
+      - '8080:8080'
+
+  mongo:
+    image: mongo
+    restart: always
+    container_name: "mongodb"
+    working_dir: "/database/"
+    ports:
+      - '27017:27017'
+    volumes:
+      - "./database/:/data/db"

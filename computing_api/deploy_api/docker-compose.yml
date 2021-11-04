@@ -1,0 +1,46 @@
+version: '3'
+
+services:
+  job-dispatcher:
+    restart: 'unless-stopped'
+    container_name: 'job-dispatcher'
+    build:
+      context: 'job_dispatcher'
+      dockerfile: 'docker/Dockerfile'
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    command: 'python3 job_dispatcher.py'
+    depends_on:
+      - 'zookeeper'
+    ports:
+      - '8081:8081'
+
+  consumer:
+    restart: 'unless-stopped'
+    container_name: 'consumer'
+    build:
+      context: 'consumer/'
+      dockerfile: 'Dockerfile'
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./consumer:/app"
+    depends_on:
+      - "zookeeper"
+
+  zookeeper:
+    image: arm64v8/zookeeper
+    container_name: 'zookeeper'
+    expose:
+      - '2181'
+    environment:
+      zk_id: "1"
+
+  kafka:
+    image: ligato/kafka-arm64
+    depends_on:
+      - zookeeper
+    ports:
+      - '9092:9092'
+    container_name: 'kafka'
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
