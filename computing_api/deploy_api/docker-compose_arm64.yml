@@ -28,7 +28,7 @@ services:
       - "zookeeper"
 
   zookeeper:
-    image: confluent/zookeeper
+    image: arm64v8/zookeeper
     container_name: 'zookeeper'
     expose:
       - '2181'
@@ -36,7 +36,7 @@ services:
       zk_id: "1"
 
   kafka:
-    image: confluent/kafka
+    image: ligato/kafka-arm64
     depends_on:
       - zookeeper
     ports:
