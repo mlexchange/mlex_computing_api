@@ -113,8 +113,7 @@ if __name__ == '__main__':
                             svc_context.job_svc.update_status(new_job.uid, "failed", err)
                     time.sleep(1)
                     container = docker_client.containers.get(container.id)
-                if new_job.terminate is False:
-                    svc_context.job_svc.update_status(new_job.uid, "completed")
+                svc_context.job_svc.update_status(new_job.uid, "completed")
 
         # Idle for 1min if no job is found
         time.sleep(60)
