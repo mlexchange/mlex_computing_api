@@ -1,12 +1,9 @@
-import json
-import requests
-
 from uuid import uuid4
 from pymongo.mongo_client import MongoClient
 from typing import List
 
 
-from model import SimpleJob, DeployLocation, PatchRequest
+from model import SimpleJob, DeployLocation
 
 
 class JobNotFound(Exception):
@@ -28,17 +25,16 @@ class JobService:
         simplejob_dict = simplejob.dict()
         self._collection_job_list.insert_one(simplejob_dict)
         self._clean_id(simplejob_dict)
-        url = 'http://host.docker.internal:8081/api/v0/jobs'
-        response = requests.post(url, json=simplejob_dict)
-        timestamp = response
         return simplejob
 
     def find_jobs(self,
+                  user: str = None,
                   mlex_app: str = None,
                   job_type: str = None,
                   deploy_location: DeployLocation = None
                   ) -> List[SimpleJob]:
         """ Finds jobs that match the query parameters
+        :param user: username
         :param mlex_app: source mlexchange app
         :param job_type: type of job
         :param deploy_location: deployment location
@@ -47,6 +43,10 @@ class JobService:
         """
         subqueries = []
         query = {}
+
+        if user:
+            subqueries.append({"user": user})
+
         if mlex_app:
             subqueries.append({"mlex_app": mlex_app})
 
@@ -66,31 +66,27 @@ class JobService:
 
         return jobs
 
-    def update_status(self, job_uid: str, req: PatchRequest):
+    def terminate_job(self, job_uid: str):
         """
         :param job_uid: uid of job to be updated
         :param req: information to update
         """
-        status = req.status
-        pid = req.pid
-
         job = self._collection_job_list.find_one({"uid": job_uid})
         if not job:
             raise JobNotFound(f"no job with id: {job_uid}")
 
-        if pid is None:
-            self._collection_job_list.update_one(
-                {'uid': job_uid},
-                {'$set': {'status': status}}
-            )
-        else:
-            self._collection_job_list.update_one(
-                {'uid': job_uid},
-                {'$set': {'status': status, 'pid': pid}}
-            )
+        self._collection_job_list.update_one(
+            {'uid': job_uid},
+            {'$set': {'terminate': True}}
+        )
+
+    def get_logs(self, uid: str):
+        job = self._collection_job_list.find_one({"uid": uid})
+        return job['container_logs']
 
     def _create_indexes(self):
         self._collection_job_list.create_index([('uid', 1)], unique=True)
+        self._collection_job_list.create_index([('user', 1)])
         self._collection_job_list.create_index([('mlex_app', 1)])
         self._collection_job_list.create_index([('job_type', 1)])
         self._collection_job_list.create_index([('deploy_location', 1)])
@@ -101,13 +97,6 @@ class JobService:
         """
         if '_id' in data:
             del data['_id']
-
-    @staticmethod
-    def get_output(pid: int, deploy_location: DeployLocation):
-        url = 'http://host.docker.internal:8081/api/v0/jobs/output'
-        response = requests.post(url, json=pid)
-        data = json.loads(response.read())
-        return data
 
 
 class Context:

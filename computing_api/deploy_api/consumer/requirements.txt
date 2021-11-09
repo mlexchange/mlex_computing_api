@@ -1,4 +1,0 @@
-docker==5.0.3
-kafka-python==2.0.2
-kq==2.2.0
-requests==2.22.0

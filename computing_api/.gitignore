@@ -1,9 +1,0 @@
-.env
-.DS_Store
-__pycache__
-
-#test dataset
-data
-
-#mongo data
-job_manager/database/*

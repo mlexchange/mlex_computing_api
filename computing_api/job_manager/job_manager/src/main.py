@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from starlette.config import Config
 import uvicorn
 
-from model import SimpleJob, DeployLocation, PatchRequest
+from model import SimpleJob, DeployLocation
 from job_service import JobService, Context
 
 
@@ -61,6 +61,7 @@ def submit_job(job: SimpleJob):
 
 @app.get(API_URL_PREFIX + '/jobs', tags=['jobs'])
 def get_job(
+        user: Optional[str] = None,
         mlex_app: Optional[str] = None,
         job_type: Optional[str] = None,
         deploy_location: Optional[DeployLocation] = None
@@ -68,6 +69,7 @@ def get_job(
     """ This function returns the list of jobs that match the query parameters
 
     Args:
+        user (Optional[str], optiona;): find jobs based on the user. Defaults to None
         mlex_app (Optional[str], optional): find jobs based on the app. Defaults to None
         job_type (Optional[str], optional): find jobs based on the job type. Defaults to None
         deploy_location (Optional[DeployLocation], optional): find jobs based on the
@@ -76,19 +78,19 @@ def get_job(
     Returns:
         List[SimpleJob]: [Full object simplejobs that match the query parameters]
     """
-    jobs = svc_context.job_svc.find_jobs(mlex_app=mlex_app, job_type=job_type, deploy_location=deploy_location)
+    jobs = svc_context.job_svc.find_jobs(user=user, mlex_app=mlex_app, job_type=job_type, deploy_location=deploy_location)
     return jobs
 
 
-@app.get(API_URL_PREFIX + '/jobs/output', tags=['jobs', 'output'])
-def get_job_output(pid: int, deploy_location: DeployLocation):
-    output = svc_context.job_svc.get_output(pid, deploy_location)
+@app.get(API_URL_PREFIX + '/jobs/{uid}/logs', tags=['jobs', 'logs'])
+def get_job_logs(uid: str):
+    output = svc_context.job_svc.get_logs(uid)
     return output
 
 
-@app.patch(API_URL_PREFIX + '/jobs/{uid}/status', tags=['jobs', 'status'], response_model=ResponseModel)
-def update_job_status(uid: str, req: PatchRequest):
-    svc_context.job_svc.update_status(uid, req)
+@app.patch(API_URL_PREFIX + '/jobs/{uid}/terminate', tags=['jobs', 'terminate'], response_model=ResponseModel)
+def terminate_job(uid: str):
+    svc_context.job_svc.terminate_job(uid)
     return ResponseModel(uid=uid)
 
 
