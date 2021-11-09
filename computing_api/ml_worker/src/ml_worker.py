@@ -88,8 +88,11 @@ if __name__ == '__main__':
 
         if new_job:
             try:
-                cmd = new_job.container_cmd + ' ' + ' '.join(new_job.container_kwargs['directories']) + ' \'' + \
-                      str(json.dumps(new_job.container_kwargs['parameters'])) + '\''
+                if new_job.container_kwargs['parameters']:
+                    cmd = new_job.container_cmd + ' ' + ' '.join(new_job.container_kwargs['directories']) + ' \'' + \
+                          str(json.dumps(new_job.container_kwargs['parameters'])) + '\''
+                else:
+                    cmd = new_job.container_cmd + ' ' + ' '.join(new_job.container_kwargs['directories'])
                 container = docker_client.containers.run(new_job.container_uri,
                                                          command=cmd,
                                                          volumes=['{}:/app/work/data'.format(new_job.data_uri)],
