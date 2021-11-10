@@ -114,6 +114,6 @@ if __name__ == '__main__':
                     time.sleep(1)
                     container = docker_client.containers.get(container.id)
                 svc_context.job_svc.update_status(new_job.uid, "completed")
-
-        # Idle for 1min if no job is found
-        time.sleep(60)
+        else:
+            # Idle for 1min if no job is found
+            time.sleep(5)
