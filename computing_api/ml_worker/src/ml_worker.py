@@ -100,6 +100,7 @@ if __name__ == '__main__':
             except Exception as err:
                 svc_context.job_svc.update_status(new_job.uid, "failed", err)
             else:
+                svc_context.job_svc.update_status(new_job.uid, "running")
                 while container.status == 'created' or container.status == 'running':
                     new_job = svc_context.job_svc.find_job(new_job.uid)
                     if new_job.terminate:
@@ -115,5 +116,5 @@ if __name__ == '__main__':
                     container = docker_client.containers.get(container.id)
                 svc_context.job_svc.update_status(new_job.uid, "completed")
         else:
-            # Idle for 1min if no job is found
+            # Idle for 5 seconds if no job is found
             time.sleep(5)
