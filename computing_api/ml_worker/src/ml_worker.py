@@ -120,7 +120,7 @@ if __name__ == '__main__':
                     svc_context.job_svc.update_logs(new_job.uid, output)
                     svc_context.job_svc.update_status(new_job.uid, "completed")
                 else:
-                    if new_job.terminate is False:
+                    if new_job.terminate is None:
                         try:
                             output = container.logs(stdout=True)
                             svc_context.job_svc.update_logs(new_job.uid, output)
