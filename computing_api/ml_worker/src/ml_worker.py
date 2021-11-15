@@ -98,8 +98,9 @@ if __name__ == '__main__':
                                                          volumes=['{}:/app/work/data'.format(new_job.data_uri)],
                                                          detach=True)
             except Exception as err:
-                svc_context.job_svc.update_status(new_job.uid, "failed", err)
+                svc_context.job_svc.update_status(new_job.uid, "failed", repr(err))
             else:
+                svc_context.job_svc.update_status(new_job.uid, "running")
                 while container.status == 'created' or container.status == 'running':
                     new_job = svc_context.job_svc.find_job(new_job.uid)
                     if new_job.terminate:
@@ -110,10 +111,24 @@ if __name__ == '__main__':
                             output = container.logs(stdout=True)
                             svc_context.job_svc.update_logs(new_job.uid, output)
                         except Exception as err:
-                            svc_context.job_svc.update_status(new_job.uid, "failed", err)
+                            svc_context.job_svc.update_status(new_job.uid, "failed", repr(err))
                     time.sleep(1)
                     container = docker_client.containers.get(container.id)
-                svc_context.job_svc.update_status(new_job.uid, "completed")
+                result = container.wait()
+                if result["StatusCode"] == 0:
+                    output = container.logs(stdout=True)
+                    svc_context.job_svc.update_logs(new_job.uid, output)
+                    svc_context.job_svc.update_status(new_job.uid, "completed")
+                else:
+                    if new_job.terminate is None:
+                        try:
+                            output = container.logs(stdout=True)
+                            svc_context.job_svc.update_logs(new_job.uid, output)
+                        except Exception:
+                            pass
+                        err = "Code: "+str(result["StatusCode"])+ " Error: " + repr(result["Error"])
+                        svc_context.job_svc.update_status(new_job.uid, "failed", err)
+            # container.remove()
         else:
-            # Idle for 1min if no job is found
+            # Idle for 5 seconds if no job is found
             time.sleep(5)

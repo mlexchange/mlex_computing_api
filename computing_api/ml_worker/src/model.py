@@ -1,4 +1,5 @@
 from enum import Enum
+from datetime import datetime
 
 from pydantic import BaseModel, Extra, Field
 from typing import Optional
@@ -24,6 +25,12 @@ class JobStatus(str, Enum):
     terminated = "terminated"
 
 
+class TimeStamps(BaseModel):
+    submission_time: datetime = Field(default_factory=datetime.utcnow)
+    start_time: Optional[datetime]
+    end_time: Optional[datetime]
+
+
 class SimpleJob(BaseModel):
     uid: str = DEFAULT_UID
     schema_version: str = SCHEMA_VERSION
@@ -33,6 +40,7 @@ class SimpleJob(BaseModel):
     job_pid: str = DEFAULT_JOB_PID
     description: Optional[str] = Field(description="job description")
     status: JobStatus = DEFAULT_JOB_STATUS
+    timestamps: Optional[TimeStamps]
     error: Optional[str] = Field(description="error description")
     deploy_location: DeployLocation
     gpu: bool = Field(description="run in gpu")

@@ -1,10 +1,11 @@
 from enum import Enum
+from datetime import datetime
 
 from pydantic import BaseModel, Extra, Field
 from typing import Optional
 
 
-SCHEMA_VERSION = "0.1"
+SCHEMA_VERSION = "0.2"
 DEFAULT_UID = "425f6781-e42b-23e2-a341-2431564214523"
 DEFAULT_JOB_STATUS = "sent_queue"
 DEFAULT_JOB_PID = str(0)
@@ -24,6 +25,15 @@ class JobStatus(str, Enum):
     terminated = "terminated"
 
 
+class TimeStamps(BaseModel):
+    submission_time: datetime = Field(default_factory=datetime.utcnow)
+    start_time: Optional[datetime]
+    end_time: Optional[datetime]
+
+
+DEFAULT_TIMESTAMP = TimeStamps(submission_time=datetime.utcnow())
+
+
 class SimpleJob(BaseModel):
     uid: str = DEFAULT_UID
     schema_version: str = SCHEMA_VERSION
@@ -33,6 +43,7 @@ class SimpleJob(BaseModel):
     job_pid: str = DEFAULT_JOB_PID
     description: Optional[str] = Field(description="job description")
     status: JobStatus = DEFAULT_JOB_STATUS
+    timestamps: TimeStamps = DEFAULT_TIMESTAMP
     error: Optional[str] = Field(description="error description")
     deploy_location: DeployLocation
     gpu: bool = Field(description="run in gpu")
@@ -40,7 +51,7 @@ class SimpleJob(BaseModel):
     data_uri: str = Field(description="dataset uri")
     container_uri: str = Field(description="container uri")
     container_cmd: str = Field(description="command to run")
-    container_kwargs: Optional[dict] = Field(description="container kwargs") #Optional[str] = Field(description="container kwargs")
+    container_kwargs: Optional[dict] = Field(description="container kwargs")
     container_logs: Optional[str] = Field(description="container logs")
 
     class Config:
