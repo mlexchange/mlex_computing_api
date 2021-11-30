@@ -22,7 +22,8 @@ class DispatchService:
         if uid:
             item = self._collection_job_list.find_one({"uid": uid})
         else:
-            item = self._collection_job_list.find_one({"status": "sent_queue"})
+            item = self._collection_job_list.find_one_and_update({"status": "sent_queue"},
+                                                                 {'$set': {'status': "running"}})
         if item:
             item = self.clean_id(item)
             return SimpleJob.parse_obj(item)
@@ -100,7 +101,6 @@ if __name__ == '__main__':
             except Exception as err:
                 svc_context.job_svc.update_status(new_job.uid, "failed", repr(err))
             else:
-                svc_context.job_svc.update_status(new_job.uid, "running")
                 while container.status == 'created' or container.status == 'running':
                     new_job = svc_context.job_svc.find_job(new_job.uid)
                     if new_job.terminate:

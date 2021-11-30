@@ -14,9 +14,9 @@ services:
     ports:
       - '8080:8080'
 
-  ml-worker:
+  ml-worker0:
     restart: 'unless-stopped'
-    container_name: 'ml-worker'
+    container_name: 'ml-worker0'
     build:
       context: 'ml_worker'
       dockerfile: 'docker/Dockerfile'
@@ -25,6 +25,19 @@ services:
       - "./ml_worker:/app"
     depends_on:
       - 'mongo'
+
+  ml-worker1:
+    restart: 'unless-stopped'
+    container_name: 'ml-worker1'
+    build:
+      context: 'ml_worker'
+      dockerfile: 'docker/Dockerfile'
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./ml_worker:/app"
+    depends_on:
+      - 'mongo'
+      - 'ml-worker0'
 
   mongo:
     image: mongo
