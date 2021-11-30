@@ -19,7 +19,7 @@ services:
     container_name: 'ml-worker0'
     build:
       context: 'ml_worker'
-      dockerfile: 'docker/Dockerfile
+      dockerfile: 'docker/Dockerfile'
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "./ml_worker:/app"
