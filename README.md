@@ -1,4 +1,4 @@
-Job manager for MLExchange platfom. To use it, do the followings:   
+Job manager for MLExchange platfom. To use it, do the following:   
 
 First `cd computing_api`,   
 Then use the command `docker-compose up --build`. 
