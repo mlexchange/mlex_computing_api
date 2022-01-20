@@ -96,6 +96,7 @@ if __name__ == '__main__':
                     cmd = new_job.container_cmd + ' ' + ' '.join(new_job.container_kwargs['directories'])
                 container = docker_client.containers.run(new_job.container_uri,
                                                          command=cmd,
+                                                         device_requests=docker.types.DeviceRequest(count=-1, capabilities=[['gpu']]),
                                                          volumes=['{}:/app/work/data'.format(new_job.data_uri)],
                                                          detach=True)
             except Exception as err:
