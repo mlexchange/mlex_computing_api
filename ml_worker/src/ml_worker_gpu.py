@@ -92,7 +92,7 @@ if __name__ == '__main__':
     while True:
         new_job = svc_context.job_svc.find_job()
         print(new_job)
-        
+
         if new_job:
             try:
                 if new_job.container_kwargs['parameters']:
@@ -139,7 +139,7 @@ if __name__ == '__main__':
                             pass
                         err = "Code: "+str(result["StatusCode"])+ " Error: " + repr(result["Error"])
                         svc_context.job_svc.update_status(new_job.uid, "failed", err)
-            container.remove()
+            # container.remove()
         else:
             # Idle for 5 seconds if no job is found
             time.sleep(5)
