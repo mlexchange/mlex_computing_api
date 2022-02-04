@@ -77,7 +77,7 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "./ml_worker:/app"
     depends_on:
-      - 'ml-worker-gpu1'
+      - 'ml-worker-gpu0'
 
   mongo:
     image: mongo:4.4
