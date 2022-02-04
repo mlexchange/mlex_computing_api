@@ -14,8 +14,8 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: '${MONGO_DB_PASSWORD}'
     depends_on:
       - 'mongo'
-    ports:
-      - '8080:8080'
+#    ports:
+#      - '8080:8080'
 
   ml-worker-cpu0:
     restart: 'unless-stopped'
