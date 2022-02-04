@@ -91,7 +91,8 @@ docker_client = docker.from_env()
 if __name__ == '__main__':
     while True:
         new_job = svc_context.job_svc.find_job()
-
+        print(new_job)
+        
         if new_job:
             try:
                 if new_job.container_kwargs['parameters']:
