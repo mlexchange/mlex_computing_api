@@ -24,13 +24,11 @@ class DispatchService:
         if uid:
             item = self._collection_job_list.find_one({"uid": uid})
         else:
-            item = self._collection_job_list.find_one_and_update({"status": "sent_queue"},
+            item = self._collection_job_list.find_one_and_update({"status": "sent_queue", "gpu" : True},
                                                                  {'$set': {'status': "running"}})
         if item:
             item = self.clean_id(item)
-            job = SimpleJob.parse_obj(item)
-            if job.gpu:     # check if job runs in GPU
-                return job
+            return SimpleJob.parse_obj(item)
         return None
 
     def update_status(self, uid, status, err=None):
@@ -91,7 +89,6 @@ docker_client = docker.from_env()
 if __name__ == '__main__':
     while True:
         new_job = svc_context.job_svc.find_job()
-        print(new_job)
 
         if new_job:
             try:
@@ -139,7 +136,7 @@ if __name__ == '__main__':
                             pass
                         err = "Code: "+str(result["StatusCode"])+ " Error: " + repr(result["Error"])
                         svc_context.job_svc.update_status(new_job.uid, "failed", err)
-            # container.remove()
+            container.remove()
         else:
             # Idle for 5 seconds if no job is found
             time.sleep(5)

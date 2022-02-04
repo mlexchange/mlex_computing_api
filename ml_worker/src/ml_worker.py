@@ -23,13 +23,11 @@ class DispatchService:
         if uid:
             item = self._collection_job_list.find_one({"uid": uid})
         else:
-            item = self._collection_job_list.find_one_and_update({"status": "sent_queue"},
+            item = self._collection_job_list.find_one_and_update({"status": "sent_queue", "gpu" : False},
                                                                  {'$set': {'status': "running"}})
         if item:
             item = self.clean_id(item)
-            job = SimpleJob.parse_obj(item)
-            if not job.gpu:  # check if job runs in GPU
-                return job
+            return SimpleJob.parse_obj(item)
         return None
 
     def update_status(self, uid, status, err=None):
