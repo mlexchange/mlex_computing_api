@@ -3,7 +3,7 @@ import time
 import docker
 import requests
 
-from model import MlexWorker
+from model import MlexWorker, Status
 
 
 COMP_API_URL = 'http://job-service:8080/api/v0/private/'
@@ -19,8 +19,8 @@ def get_next_worker():
     return worker
 
 
-def update_worker_status(worker_id, status):
-    response = requests.patch(f'{COMP_API_URL}workers/{worker_id}/update', params={'status': status})
+def update_worker_status(worker_id, status: Status):
+    response = requests.patch(f'{COMP_API_URL}workers/{worker_id}/update', json=status.dict())
     pass
 
 
@@ -45,10 +45,11 @@ if __name__ == '__main__':
                                                             # I need to add the data volume too
                                                          detach = True)
             except Exception as err:
-                print(err)
-                update_worker_status(new_worker.uid, "failed")
+                status = Status(state="failed", return_code=err)
+                update_worker_status(new_worker.uid, status)
             else:
-                update_worker_status(new_worker.uid, "running")
+                status = Status(state="running")
+                update_worker_status(new_worker.uid, status)
         else:
             # Idle for 5 seconds if no worker is found
             time.sleep(5)

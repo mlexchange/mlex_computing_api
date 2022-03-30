@@ -6,7 +6,7 @@ from typing import Optional, List, Union
 
 
 ###################################################### DATA TYPES ######################################################
-class Status(str, Enum):
+class States(str, Enum):
     queue = "queue"
     running = "running"
     warning= "warning"
@@ -23,12 +23,9 @@ class WorkflowType(str, Enum):
 
 
 ###################################################### SUBCLASSES ######################################################
-DEFAULT_STATUS = "queue"
-
-
-class WorkerStatus(BaseModel):
-    status: Status = DEFAULT_STATUS
-    current_job: List[int] = []
+class Status(BaseModel):
+    state: States
+    return_code: Optional[str]
 
 
 class TimeStamps(BaseModel):
@@ -41,7 +38,7 @@ class DockerJob(BaseModel):
     uri: str = Field(description="container uri")
     type: str = 'docker'
     cmd: str = Field(description="command to run")
-    logs: Optional[str] = Field(description="container logs")
+    # logs: Optional[str] = Field(description="container logs")
     kwargs: Optional[dict] = Field(description="container kwargs")
 
 
@@ -71,6 +68,8 @@ SCHEMA_VERSION = "1.0"
 DEFAULT_UID = "425f6781-e42b-23e2-a341-2431564214523"
 DEFAULT_JOB_PID = str(0)
 DEFAULT_UID_LIST = [DEFAULT_UID]
+DEFAULT_STATUS = Status(**{'state': 'queue'})
+DEFAULT_LOGS = ''
 
 
 class MlexHost(BaseModel):
@@ -101,13 +100,14 @@ class MlexJob(BasicAsset):
     working_directory: str = Field(description="dataset uri")
     status: Status = DEFAULT_STATUS
     pid: str = DEFAULT_JOB_PID
+    logs: Optional[str]
     class Config:
         extra = Extra.ignore
 
 
 class MlexWorker(BasicAsset):
     host_uid: str = Field(description='remote MLExchange host identifier')
-    status: Status = DEFAULT_STATUS #WorkerStatus = Status
+    status: Status = DEFAULT_STATUS
     jobs_list: List[str] = DEFAULT_UID_LIST
     requirements: Optional[WorkerRequirements] = Field(description='computational requirements')
     class Config:

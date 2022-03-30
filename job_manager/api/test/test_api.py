@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from model import MlexWorker, MlexWorkflow, MlexHost, MlexJob
+from model import MlexWorker, MlexWorkflow, MlexHost, MlexJob, Status
 
 
 COMP_URL = 'http://localhost:8080/api/v0/'
@@ -87,12 +87,12 @@ def test_get_next_workers(rest_client: TestClient):
     # check that the resources have been updated
     if init_num_available_processors-latest_num_available_processors == num_processors and \
         init_num_available_gpus-latest_num_available_gpus == num_gpus and \
-        init_num_running_workers - latest_num_running_workers == 1 and \
+        latest_num_running_workers - init_num_running_workers == 1 and \
         init_list_available_gpus == assigned_gpus + latest_list_available_gpus :
         requirements_ok = True
     else:
         requirements_ok = False
-    assert worker.host_uid == mlex_host.uid and requirements_ok and worker.status == 'running'
+    assert worker.host_uid == mlex_host.uid and requirements_ok and worker.status.state == 'running'
 
 
 def test_update_status(rest_client: TestClient):
@@ -104,51 +104,56 @@ def test_update_status(rest_client: TestClient):
     # change the status of the jobs in this worker
     for job_uid in worker.jobs_list:
         # change the status
-        response = rest_client.patch(f'{COMP_URL}private/jobs/{job_uid}/update', params={'status': 'running'})
+        status = Status(**{'state': 'running'})
+        response = rest_client.patch(f'{COMP_URL}private/jobs/{job_uid}/update',
+                                     params={'logs': 'this is a test'}, json=status.dict())
         assert response.status_code == 200
         # check that the status has been changed correctly
         job = rest_client.get(f'{COMP_URL}jobs/{job_uid}').json()
         mlex_job = MlexJob.parse_obj(job)
-        assert mlex_job.status == 'running'
+        assert mlex_job.status.state == 'running' and mlex_job.logs == 'this is a test'
     # check that the status has changed too
     item = rest_client.get(f'{COMP_URL}workers/{worker.uid}').json()
     mlex_item = MlexWorker.parse_obj(item)
-    assert mlex_item.status == 'running'
+    assert mlex_item.status.state == 'running'
 
     # let's change the status of the last job as failed
-    response = rest_client.patch(f'{COMP_URL}private/jobs/{job_uid}/update', params={'status': 'failed'})
+    status = Status(**{'state': 'failed'})
+    response = rest_client.patch(f'{COMP_URL}private/jobs/{job_uid}/update', json=status.dict())
     assert response.status_code == 200
     # check that the status has been changed correctly
     job = rest_client.get(f'{COMP_URL}jobs/{job_uid}').json()
     mlex_job = MlexJob.parse_obj(job)
-    assert mlex_job.status == 'failed'
+    assert mlex_job.status.state == 'failed'
     # check that the status has changed too
     item = rest_client.get(f'{COMP_URL}workers/{worker.uid}').json()
     mlex_item = MlexWorker.parse_obj(item)
-    assert mlex_item.status == 'warning'
+    assert mlex_item.status.state == 'warning'
 
     # let's mark the first job as completed
     first_job_uid = worker.jobs_list[0]
-    response = rest_client.patch(f'{COMP_URL}private/jobs/{first_job_uid}/update', params={'status': 'complete'})
+    status = Status(**{'state': 'complete'})
+    response = rest_client.patch(f'{COMP_URL}private/jobs/{first_job_uid}/update', json=status.dict())
     assert response.status_code == 200
     # check that the status has been changed correctly
     job = rest_client.get(f'{COMP_URL}jobs/{first_job_uid}').json()
     mlex_job = MlexJob.parse_obj(job)
-    assert mlex_job.status == 'complete'
+    assert mlex_job.status.state == 'complete'
     # check that the status has changed too
     item = rest_client.get(f'{COMP_URL}workers/{worker.uid}').json()
     mlex_item = MlexWorker.parse_obj(item)
-    assert mlex_item.status == 'complete with errors'
+    assert mlex_item.status.state == 'complete with errors'
 
     # check the status of the workflow
     workflow = rest_client.get(f'{COMP_URL}workflows').json()
     assert len(workflow) == 1
     mlex_workflow = MlexWorkflow.parse_obj(workflow[0])
-    assert mlex_workflow.status == 'warning'
+    assert mlex_workflow.status.state == 'warning'
 
 
 def test_terminate_processes(rest_client: TestClient):
-    jobs = rest_client.get(f'{COMP_URL}jobs', params={'status': 'queue'}).json()
+    status = Status(**{'state': 'queue'})
+    jobs = rest_client.get(f'{COMP_URL}jobs', json=status.dict()).json()
     mlex_jobs = []
     for job in jobs:
         mlex_jobs.append(MlexJob.parse_obj(job))
@@ -163,7 +168,8 @@ def test_terminate_processes(rest_client: TestClient):
     assert mlex_job.terminate
 
     # terminate the worker
-    worker = rest_client.get(f'{COMP_URL}workers', params={'status': 'running'}).json()
+    status = Status(**{'state': 'running'})
+    worker = rest_client.get(f'{COMP_URL}workers', json=status.dict()).json()
     assert len(worker) == 1  # worker 1 is still running
     worker = MlexWorker.parse_obj(worker[0])
     response = rest_client.patch(f'{COMP_URL}workers/{worker.uid}/terminate')
@@ -196,7 +202,7 @@ job2 = {
 }
 
 job3 = {
-    'mlex_app': 'data-clinic',
+    'mlex_app': 'clinic',
     'job_kwargs': {'uri': 'image', 'cmd': 'python3'},
     'working_directory': 'home',
 }

@@ -162,7 +162,7 @@ def get_workers(host_uid: Optional[str] = None,
 
 
 @app.get(API_URL_PREFIX + '/jobs/{uid}', tags=['jobs'])
-def get_next_job(uid: str) -> MlexJob:
+def get_job(uid: str) -> MlexJob:
     """
     This function returns the job that matches the query parameters
     Args:
@@ -170,7 +170,7 @@ def get_next_job(uid: str) -> MlexJob:
     Returns:
         MlexJob: Full object MlexJob that matches the query parameters
     """
-    job = svc_context.comp_svc.get_next_job(uid=uid)
+    job = svc_context.comp_svc.get_job(uid=uid)
     return job
 
 
@@ -192,6 +192,19 @@ def get_jobs(user: Optional[str] = None,
     """
     jobs = svc_context.comp_svc.get_jobs(user=user, mlex_app=mlex_app, host_uid=host_uid, status=status)
     return jobs
+
+
+@app.get(API_URL_PREFIX + '/private/jobs/{uid}', tags=['jobs'])
+def get_next_job(uid: str) -> MlexJob:
+    """
+    This function returns the job that matches the query parameters
+    Args:
+        uid:    Job UID
+    Returns:
+        MlexJob: Full object MlexJob that matches the query parameters
+    """
+    job = svc_context.comp_svc.get_next_job(uid=uid)
+    return job
 
 
 @app.get(API_URL_PREFIX + '/private/workers', tags=['private'])
@@ -223,7 +236,7 @@ def terminate_workflow(uid: str):
 
 @app.patch(API_URL_PREFIX + '/private/workers/{uid}/update', tags=['private'], response_model=ResponseModel)
 def update_worker(uid: str,
-                  status: str
+                  status: Status
                   ):
     '''
     This function updates the worker status
@@ -252,17 +265,19 @@ def terminate_worker(uid: str):
 
 @app.patch(API_URL_PREFIX + '/private/jobs/{uid}/update', tags=['private'], response_model=ResponseModel)
 def update_job(uid: str,
-               status: str,
+               status: Optional[Status] = None,
+               logs: Optional[str] = None
                ):
     '''
     This function updates the job status
     Args:
         uid:        Unique job identifier
         status:     Job status
+        logs:       Job logs
     Returns:
         job_uid
     '''
-    svc_context.comp_svc.update_job(uid, status)
+    svc_context.comp_svc.update_job(uid, status, logs)
     return ResponseModel(uid=uid)
 
 

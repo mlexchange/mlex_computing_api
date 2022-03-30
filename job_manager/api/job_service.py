@@ -230,13 +230,11 @@ class ComputeService:
                 next_worker = self._collection_worker_list.find_one_and_update(
                     {
                         "host_uid": host_uid,
-                        "status": "queue",
-                        "requirements.num_processors":
-                            {'$lte': available_processors},
-                        "requirements.num_gpus":
-                            {'$lte': available_gpus}
+                        "status.state": "queue",
+                        "requirements.num_processors": {'$lte': available_processors},
+                        "requirements.num_gpus": {'$lte': available_gpus}
                     },
-                    {"$set": {"status": "running"},
+                    {"$set": {"status.state": "running"},
                      # "$push": {"requirements.list_gpus": {"$each": list_gpus, "$slice": "$$num_gpus"}}},
                      },
                     return_document = ReturnDocument.AFTER)     # returns the updated worker
@@ -288,7 +286,8 @@ class ComputeService:
         Returns:
             Job that matches the query
         '''
-        item = self._collection_job_list.find_one_and_update({"uid": uid}, {"$set": {"status": "running"}})
+        status = Status(**{"state": "running"})
+        item = self._collection_job_list.find_one_and_update({"uid": uid}, {"$set": {"status": status.dict()}})
         if not item:
             raise JobNotFound(f"no job with id: {uid}")
         self._clean_id(item)
@@ -375,7 +374,7 @@ class ComputeService:
         if workflow.status != status:                     # update if status has changed
             self._collection_workflow_list.update_one(
                 {'uid': workflow_uid},
-                {'$set': {'status': status}}
+                {'$set': {'status': status.dict()}}
             )
         return workflow_uid
 
@@ -408,31 +407,33 @@ class ComputeService:
             None
         '''
         worker = self.get_worker(uid=worker_uid)
-        if worker.status != status:                     # update if status has changed
+        if worker.status.state != status.state:                     # update if status has changed
             self._collection_worker_list.update_one(
                 {'uid': worker_uid},
-                {'$set': {'status': status}}
+                {'$set': {'status': status.dict()}}
             )
-            if status in ['complete', 'complete with errors', 'failed', 'terminated']:
+            if status.state in ['complete', 'complete with errors', 'failed', 'terminated']:
                 self.update_host(worker.host_uid, worker.requirements)
             workflow = self.get_workflow(worker_uid=worker_uid)
             last_worker = True                          # check if this is the last job in worker
             for item_uid in workflow.workers_list:
                 item = self.get_worker(uid=item_uid)
-                if item.status in ['running', 'queue', 'warning'] and item.uid != worker_uid:
+                if item.status.state in ['running', 'queue', 'warning'] and item.uid != worker_uid:
                     last_worker = False
                     break
             # check if it is the last worker in workflow with error/termination
-            if last_worker and workflow.status == 'warning' and status in ['complete', 'complete with errors']:
-                status = 'complete with errors'
+            if last_worker and workflow.status.state == 'warning' and \
+                    status.state in ['complete', 'complete with errors']:
+                status.state = 'complete with errors'
             # if it is not the last worker in workflow and the worker has failed, completed with errors or was
             # terminated or canceled, the workflow is tagged with a "warning"
-            elif workflow.status == 'warning' or status in ['failed', 'terminated', 'canceled', 'complete with errors']:
-                status = 'warning'
+            elif workflow.status.state == 'warning' or \
+                    status.state in ['failed', 'terminated', 'canceled', 'complete with errors']:
+                status.state = 'warning'
             # if it is not the last worker, but it has completed it's execution
-            elif not last_worker and status == 'complete':
-                status = 'running'
-            if workflow.status != status:               # update if status has changed
+            elif not last_worker and status.state == 'complete':
+                status.state = 'running'
+            if workflow.status.state != status.state:               # update if status has changed
                 self.update_workflow(workflow_uid=workflow.uid, status=status)
         pass
 
@@ -453,44 +454,47 @@ class ComputeService:
             {'$set': {'terminate': True}}
         )
 
-    def update_job(self, job_uid: str, status: Status):
+    def update_job(self, job_uid: str, status: Status, logs: str = None):
         '''
         Update the status of a given job and the worker associated with this job
         Args:
             job_uid:    job unique identifier
             status:     job status
+            logs:       job logs
         Returns:
             None
         '''
         job = self.get_job(uid = job_uid)
-        if job.status != status:                                    # update if status has changed
+        if job.status.state != status.state:                              # update if state has changed
             self._collection_job_list.update_one(
                 {'uid': job_uid},
-                {'$set': {'status': status}}
+                {'$set': {'status': status.dict(), 'logs': logs}}
             )
-            worker = self.get_worker(job_uid=job_uid)              # retrieve worker information
+            worker = self.get_worker(job_uid=job_uid)               # retrieve worker information
             last_job = True                                         # check if this is the last job in worker
             for item_uid in worker.jobs_list:
                 item = self.get_job(uid=item_uid)
-                print(item.status)
-                if item.status in ['running', 'queue'] and item.uid != job_uid:
+                if item.status.state in ['running', 'queue'] and item.uid != job_uid:
                     last_job = False
                     break
-            if status in ['failed', 'terminated', 'canceled']:      # if the job failed or was terminated/canceled,
-                status = 'warning'                                  # the worker is tagged as "warning"
-
+            if status.state in ['failed', 'terminated', 'canceled']:      # if the job failed or was terminated/canceled,
+                status.state = 'warning'                                  # the worker is tagged as "warning"
             # check if it is the last job in worker with error/termination
-            if last_job and (worker.status == 'warning' or status == 'warning'):
-                status = 'complete with errors'
+            if last_job and (worker.status.state == 'warning' or status.state == 'warning'):
+                status.state = 'complete with errors'
             # if it is not the last job in worker and there was a previous error/termination
-            elif worker.status == 'warning':
-                status = 'warning'
+            elif worker.status.state == 'warning':
+                status.state = 'warning'
             # if it is not the last job, but it has completed it's execution
-            elif not last_job and status == 'complete':
-                status = 'running'
-
-            if worker.status != status:  # update if status has changed
+            elif not last_job and status.state == 'complete':
+                status.state = 'running'
+            if worker.status.state != status.state:                       # update if state has changed
                 self.update_worker(worker_uid=worker.uid, status=status)
+        elif logs:
+            self._collection_job_list.update_one(
+                {'uid': job_uid},
+                {'$set': {'logs': logs}}
+            )
         pass
 
     def terminate_job(self, job_uid: str):

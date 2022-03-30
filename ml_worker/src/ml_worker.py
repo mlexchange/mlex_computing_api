@@ -6,7 +6,7 @@ import docker
 import requests
 import urllib
 
-from model import MlexWorker, MlexJob
+from model import MlexWorker, MlexJob, Status
 
 
 COMP_API_URL = 'http://job-service:8080/api/v0/'
@@ -19,8 +19,14 @@ def get_job(job_uid):
     return MlexJob.parse_obj(job)
 
 
-def update_job_status(job_id, status):
-    response = requests.patch(f'{COMP_API_URL}private/jobs/{job_id}/update', params={'status': status})
+def update_job_status(job_id, status=None, logs=None):
+    json = None
+    params = None
+    if status:
+        json = status.dict()
+    if logs:
+        params = {'logs': logs}
+    response = requests.patch(f'{COMP_API_URL}private/jobs/{job_id}/update', params=params, json=json)
     pass
 
 
@@ -55,35 +61,37 @@ if __name__ == '__main__':
                                                      volumes=volumes,
                                                      detach=True)
         except Exception as err:
-            print(err)
-            update_job_status(new_job.uid, 'failed')
+            status = Status(state="failed", return_code=err)
+            update_job_status(new_job.uid, status=status)
         else:
             while container.status == 'created' or container.status == 'running':
                 new_job = get_job(job_uid)
                 if new_job.terminate:
                     container.kill()
-                    update_job_status(new_job.uid, 'terminated')
+                    status = Status(state="terminated")
+                    update_job_status(new_job.uid, status=status)
                 else:
                     try:
-                        output = container.logs(stdout=True)
-                        # svc_context.job_svc.update_logs(new_job.uid, output) --> notify me
+                        logs = container.logs(stdout=True)
+                        update_job_status(new_job.uid, logs=logs)
                     except Exception as err:
-                        update_job_status(new_job.uid, 'failed')
+                        status = Status(state="failed", return_code=err)
+                        update_job_status(new_job.uid, status=status)
                 time.sleep(1)
                 container = DOCKER_CLIENT.containers.get(container.id)
             result = container.wait()
             if result["StatusCode"] == 0:
-                output = container.logs(stdout=True)
-                #### get the output
-                # svc_context.job_svc.update_logs(new_job.uid, output)  --> me
-                update_job_status(new_job.uid, 'complete')
+                logs = container.logs(stdout=True)
+                status = Status(state="complete")
+                update_job_status(new_job.uid, status=status, logs=logs)
             else:
                 if new_job.terminate is None:
                     try:
                         output = container.logs(stdout=True)
-                        # svc_context.job_svc.update_logs(new_job.uid, output)  --> notify me
+                        update_job_status(new_job.uid, logs=logs)
                     except Exception:
                         pass
                     err = "Code: "+str(result["StatusCode"])+ " Error: " + repr(result["Error"])
-                    update_job_status(new_job.uid, 'failed')
+                    status = Status(state="failed", return_code=err)
+                    update_job_status(new_job.uid, status=status)
         # container.remove()
