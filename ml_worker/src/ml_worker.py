@@ -1,136 +1,89 @@
+import argparse
 import json
-import logging
-import os
 import time
 
 import docker
-from pymongo import MongoClient
-from starlette.config import Config
+import requests
+import urllib
 
-from model import SimpleJob
-
-
-class DispatchService:
-    def __init__(self, client, db_name=None):
-        """ The service creates a dataset called job_list
-        """
-        if db_name is None:
-            db_name = 'job_list'
-        self._db = client[db_name]
-        self._collection_job_list = self._db.job_list
-
-    def find_job(self, uid=None):
-        if uid:
-            item = self._collection_job_list.find_one({"uid": uid})
-        else:
-            item = self._collection_job_list.find_one_and_update({"status": "sent_queue", "gpu" : False},
-                                                                 {'$set': {'status': "running"}})
-        if item:
-            item = self.clean_id(item)
-            return SimpleJob.parse_obj(item)
-        return None
-
-    def update_status(self, uid, status, err=None):
-        if err:
-            self._collection_job_list.update_one(
-                {'uid': uid},
-                {'$set': {'status': status, 'error': err}})
-        else:
-            self._collection_job_list.update_one(
-                {'uid': uid},
-                {'$set': {'status': status}})
-
-    def update_logs(self, uid, output):
-        self._collection_job_list.update_one(
-            {'uid': uid},
-            {'$set': {'container_logs': output.decode('ascii')}})
-
-    @staticmethod
-    def clean_id(data):
-        """ Removes mongo ID
-        """
-        if '_id' in data:
-            del data['_id']
-        return data
+from model import MlexWorker, MlexJob
 
 
-class Context:
-    db: MongoClient = None
-    job_svc: DispatchService = None
+COMP_API_URL = 'http://job-service:8080/api/v0/'
+DOCKER_CLIENT = docker.from_env()
 
 
-logger = logging.getLogger('job_manager')
+def get_job(job_uid):
+    response = urllib.request.urlopen(f'{COMP_API_URL}jobs/{job_uid}')
+    job = json.loads(response.read())
+    return MlexJob.parse_obj(job)
 
 
-def init_logging():
-    ch = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
-    logger.setLevel(JOB_MANAGER_LOG_LEVEL)
+def update_job_status(job_id, status):
+    response = requests.patch(f'{COMP_API_URL}private/jobs/{job_id}/update', params={'status': status})
+    pass
 
-
-config = Config(".env")
-JOB_MANAGER_LOG_LEVEL = config("JOB_MANAGER_LOG_LEVEL", cast=str, default="INFO")
-MONGO_DB_USERNAME = str(os.environ['MONGO_INITDB_ROOT_USERNAME'])
-MONGO_DB_PASSWORD = str(os.environ['MONGO_INITDB_ROOT_PASSWORD'])
-MONGO_DB_URI = "mongodb://%s:%s@mongodb:27017/?authSource=admin" % (MONGO_DB_USERNAME, MONGO_DB_PASSWORD)
-
-svc_context = Context
-
-logger.debug('starting server')
-db = MongoClient(MONGO_DB_URI)
-worker_svc = DispatchService(db)
-svc_context.job_svc = worker_svc
-
-docker_client = docker.from_env()
 
 if __name__ == '__main__':
-    while True:
-        new_job = svc_context.job_svc.find_job()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('worker', help='worker description')
+    args = parser.parse_args()
 
-        if new_job:
-            try:
-                if new_job.container_kwargs['parameters']:
-                    cmd = new_job.container_cmd + ' ' + ' '.join(new_job.container_kwargs['directories']) + ' \'' + \
-                          str(json.dumps(new_job.container_kwargs['parameters'])) + '\''
-                else:
-                    cmd = new_job.container_cmd + ' ' + ' '.join(new_job.container_kwargs['directories'])
-                container = docker_client.containers.run(new_job.container_uri,
-                                                         command=cmd,
-                                                         volumes=['{}:/app/work/data'.format(new_job.data_uri)],
-                                                         detach=True)
-            except Exception as err:
-                svc_context.job_svc.update_status(new_job.uid, "failed", repr(err))
-            else:
-                while container.status == 'created' or container.status == 'running':
-                    new_job = svc_context.job_svc.find_job(new_job.uid)
-                    if new_job.terminate:
-                        container.kill()
-                        svc_context.job_svc.update_status(new_job.uid, "terminated")
-                    else:
-                        try:
-                            output = container.logs(stdout=True)
-                            svc_context.job_svc.update_logs(new_job.uid, output)
-                        except Exception as err:
-                            svc_context.job_svc.update_status(new_job.uid, "failed", repr(err))
-                    time.sleep(1)
-                    container = docker_client.containers.get(container.id)
-                result = container.wait()
-                if result["StatusCode"] == 0:
-                    output = container.logs(stdout=True)
-                    svc_context.job_svc.update_logs(new_job.uid, output)
-                    svc_context.job_svc.update_status(new_job.uid, "completed")
-                else:
-                    if new_job.terminate is None:
-                        try:
-                            output = container.logs(stdout=True)
-                            svc_context.job_svc.update_logs(new_job.uid, output)
-                        except Exception:
-                            pass
-                        err = "Code: "+str(result["StatusCode"])+ " Error: " + repr(result["Error"])
-                        svc_context.job_svc.update_status(new_job.uid, "failed", err)
-            container.remove()
+    # get worker information
+    worker = MlexWorker(**json.loads(args.worker))
+    num_processors = worker.requirements.num_processors
+    list_gpus = worker.requirements.list_gpus
+
+    for job_uid in worker.jobs_list:
+        new_job = get_job(job_uid)
+        try:
+            # launch job
+            docker_job = new_job.job_kwargs
+            cmd = docker_job.cmd
+            volumes = []
+            device_requests = []
+            if len(new_job.working_directory)>0:
+                volumes = ['{}:/app/work/data'.format(new_job.working_directory)]
+            if len(list_gpus)>0:
+                device_requests=[docker.types.DeviceRequest(device_ids=list_gpus,
+                                                            capabilities=[['gpu']]
+                                                            )],
+            container = DOCKER_CLIENT.containers.run(docker_job.uri,
+                                                     cpu_count=num_processors,
+                                                     device_requests=device_requests,
+                                                     command=cmd,
+                                                     volumes=volumes,
+                                                     detach=True)
+        except Exception as err:
+            print(err)
+            update_job_status(new_job.uid, 'failed')
         else:
-            # Idle for 5 seconds if no job is found
-            time.sleep(5)
+            while container.status == 'created' or container.status == 'running':
+                new_job = get_job(job_uid)
+                if new_job.terminate:
+                    container.kill()
+                    update_job_status(new_job.uid, 'terminated')
+                else:
+                    try:
+                        output = container.logs(stdout=True)
+                        # svc_context.job_svc.update_logs(new_job.uid, output) --> notify me
+                    except Exception as err:
+                        update_job_status(new_job.uid, 'failed')
+                time.sleep(1)
+                container = DOCKER_CLIENT.containers.get(container.id)
+            result = container.wait()
+            if result["StatusCode"] == 0:
+                output = container.logs(stdout=True)
+                #### get the output
+                # svc_context.job_svc.update_logs(new_job.uid, output)  --> me
+                update_job_status(new_job.uid, 'complete')
+            else:
+                if new_job.terminate is None:
+                    try:
+                        output = container.logs(stdout=True)
+                        # svc_context.job_svc.update_logs(new_job.uid, output)  --> notify me
+                    except Exception:
+                        pass
+                    err = "Code: "+str(result["StatusCode"])+ " Error: " + repr(result["Error"])
+                    update_job_status(new_job.uid, 'failed')
+        # container.remove()

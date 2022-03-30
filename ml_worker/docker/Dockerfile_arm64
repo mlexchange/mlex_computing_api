@@ -26,5 +26,3 @@ RUN pip3 install --upgrade pip &&\
 WORKDIR /app
 COPY src src
 ENV PYTHONUNBUFFERED=1
-
-CMD python3 src/ml_worker.py

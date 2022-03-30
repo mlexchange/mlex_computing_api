@@ -8,7 +8,7 @@ services:
     build:
       context: 'job_manager'
       dockerfile: 'docker/Dockerfile'
-    command: 'python src/main.py'
+    command: 'python api/main.py'
     environment:
       MONGO_INITDB_ROOT_USERNAME: '${MONGO_DB_USERNAME}'
       MONGO_INITDB_ROOT_PASSWORD: '${MONGO_DB_PASSWORD}'
@@ -17,35 +17,18 @@ services:
     ports:
       - '8080:8080'
 
-  ml-worker0:
+  worker-launcher:
     restart: 'unless-stopped'
-    container_name: 'ml-worker0'
+    container_name: 'worker-launcher'
     build:
       context: 'ml_worker'
       dockerfile: 'docker/Dockerfile_arm64'
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: '${MONGO_DB_USERNAME}'
-      MONGO_INITDB_ROOT_PASSWORD: '${MONGO_DB_PASSWORD}'
+    command: 'python3 src/worker_launcher.py'
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "./ml_worker:/app"
     depends_on:
       - 'job-service'
-
-  ml-worker1:
-    restart: 'unless-stopped'
-    container_name: 'ml-worker1'
-    build:
-      context: 'ml_worker'
-      dockerfile: 'docker/Dockerfile_arm64'
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: '${MONGO_DB_USERNAME}'
-      MONGO_INITDB_ROOT_PASSWORD: '${MONGO_DB_PASSWORD}'
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock"
-      - "./ml_worker:/app"
-    depends_on:
-      - 'ml-worker0'
 
   mongo:
     image: mongo:4.4
@@ -57,3 +40,5 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: '${MONGO_DB_PASSWORD}'
     volumes:
       - "./database/:/data/db"
+    ports:
+      - "27017:27017"

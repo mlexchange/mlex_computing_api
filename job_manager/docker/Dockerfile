@@ -17,7 +17,7 @@ RUN pip3 install --upgrade pip &&\
 
 WORKDIR /app/work
 ENV HOME /app/work
-COPY src src
+COPY api api
 ENV PYTHONUNBUFFERED=1
 
 CMD ["bash"]
