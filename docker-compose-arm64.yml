@@ -23,10 +23,16 @@ services:
     build:
       context: 'ml_worker'
       dockerfile: 'docker/Dockerfile_arm64'
-    command: 'python3 src/worker_launcher.py'
+    command: sh -c '
+      sleep 20 &&
+      python3 src/worker_launcher.py'
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "./ml_worker:/app"
+    environment:
+      HOST_UID: 'd077798e-d46b-4246-99ce-18ad9a46ab7b'
+      NUM_PROCESSORS: 2
+      NETWORK: 'mlex_api_default'
     depends_on:
       - 'job-service'
 

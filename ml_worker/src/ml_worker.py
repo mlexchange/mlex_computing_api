@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import time
 
 import docker
@@ -9,14 +10,17 @@ import urllib
 from model import MlexWorker, MlexJob, Status
 
 
-COMP_API_URL = 'http://job-service:8080/api/v0/'
-DOCKER_CLIENT = docker.from_env()
+def init_logging():
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
+                        level=logging.INFO)
 
 
 def get_job(job_uid):
     response = urllib.request.urlopen(f'{COMP_API_URL}jobs/{job_uid}')
     job = json.loads(response.read())
-    return MlexJob.parse_obj(job)
+    job = MlexJob.parse_obj(job)
+    logging.info(f'Found next job: {job.uid}')
+    return job
 
 
 def update_job_status(job_id, status=None, logs=None):
@@ -26,11 +30,21 @@ def update_job_status(job_id, status=None, logs=None):
         json = status.dict()
     if logs:
         params = {'logs': logs}
-    response = requests.patch(f'{COMP_API_URL}private/jobs/{job_id}/update', params=params, json=json)
+    response = requests.patch(f'{COMP_API_URL}jobs/{job_id}/update', params=params, json=json)
+    if status:
+        logging.info(f'\"Update job {job_id} with status {status.state}\" {response.status_code}')
+    else:
+        logging.info(f'\"Update job {job_id} logs\" {response.status_code}')
     pass
 
 
+COMP_API_URL = 'http://job-service:8080/api/v0/private/'
+DOCKER_CLIENT = docker.from_env()
+
+
 if __name__ == '__main__':
+    init_logging()
+
     parser = argparse.ArgumentParser()
     parser.add_argument('worker', help='worker description')
     args = parser.parse_args()
@@ -42,8 +56,8 @@ if __name__ == '__main__':
 
     for job_uid in worker.jobs_list:
         new_job = get_job(job_uid)
-        try:
-            # launch job
+        try:        # launch job
+            logs = ''
             docker_job = new_job.job_kwargs
             cmd = docker_job.cmd
             volumes = []
@@ -61,6 +75,7 @@ if __name__ == '__main__':
                                                      volumes=volumes,
                                                      detach=True)
         except Exception as err:
+            logging.error(f'Job {new_job.uid} failed: {err}')
             status = Status(state="failed", return_code=err)
             update_job_status(new_job.uid, status=status)
         else:
@@ -72,9 +87,13 @@ if __name__ == '__main__':
                     update_job_status(new_job.uid, status=status)
                 else:
                     try:
-                        logs = container.logs(stdout=True)
-                        update_job_status(new_job.uid, logs=logs)
+                        # retrieve logs
+                        tmp_logs = container.logs(stdout=True)
+                        if logs != tmp_logs:
+                            logs = tmp_logs
+                            update_job_status(new_job.uid, logs=logs)
                     except Exception as err:
+                        logging.error(f'Job {new_job.uid} failed: {err}')
                         status = Status(state="failed", return_code=err)
                         update_job_status(new_job.uid, status=status)
                 time.sleep(1)
@@ -92,6 +111,7 @@ if __name__ == '__main__':
                     except Exception:
                         pass
                     err = "Code: "+str(result["StatusCode"])+ " Error: " + repr(result["Error"])
+                    logging.error(f'Job {new_job.uid} failed: {err}')
                     status = Status(state="failed", return_code=err)
                     update_job_status(new_job.uid, status=status)
         # container.remove()
