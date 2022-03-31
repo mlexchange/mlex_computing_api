@@ -194,7 +194,7 @@ def get_jobs(user: Optional[str] = None,
     return jobs
 
 
-@app.get(API_URL_PREFIX + '/private/jobs/{uid}', tags=['jobs'])
+@app.get(API_URL_PREFIX + '/private/jobs/{uid}', tags=['private'])
 def get_next_job(uid: str) -> MlexJob:
     """
     This function returns the job that matches the query parameters
@@ -221,7 +221,7 @@ def get_next_worker(host_uid: str = None) -> MlexWorker:
     return next_worker
 
 
-@app.patch(API_URL_PREFIX + '/workflows/{uid}/terminate', tags=['workflows', 'terminate'], response_model=ResponseModel)
+@app.patch(API_URL_PREFIX + '/workflows/{uid}/terminate', tags=['workflows'], response_model=ResponseModel)
 def terminate_workflow(uid: str):
     '''
     This function terminates the workflow
@@ -250,7 +250,7 @@ def update_worker(uid: str,
     return ResponseModel(uid=uid)
 
 
-@app.patch(API_URL_PREFIX + '/workers/{uid}/terminate', tags=['workers', 'terminate'], response_model=ResponseModel)
+@app.patch(API_URL_PREFIX + '/workers/{uid}/terminate', tags=['workers'], response_model=ResponseModel)
 def terminate_worker(uid: str):
     '''
     This function terminates the worker operation
@@ -281,7 +281,7 @@ def update_job(uid: str,
     return ResponseModel(uid=uid)
 
 
-@app.patch(API_URL_PREFIX + '/jobs/{uid}/terminate', tags=['jobs', 'terminate'], response_model=ResponseModel)
+@app.patch(API_URL_PREFIX + '/jobs/{uid}/terminate', tags=['jobs'], response_model=ResponseModel)
 def terminate_job(uid: str):
     '''
     This function terminates the job

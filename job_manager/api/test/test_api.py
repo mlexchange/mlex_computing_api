@@ -104,9 +104,10 @@ def test_update_status(rest_client: TestClient):
     # change the status of the jobs in this worker
     for job_uid in worker.jobs_list:
         # change the status
-        status = Status(**{'state': 'running'})
+        response = rest_client.get(f'{COMP_URL}private/jobs/{job_uid}')
+        assert response.status_code == 200
         response = rest_client.patch(f'{COMP_URL}private/jobs/{job_uid}/update',
-                                     params={'logs': 'this is a test'}, json=status.dict())
+                                   params={'logs': 'this is a test'})
         assert response.status_code == 200
         # check that the status has been changed correctly
         job = rest_client.get(f'{COMP_URL}jobs/{job_uid}').json()
@@ -118,14 +119,14 @@ def test_update_status(rest_client: TestClient):
     assert mlex_item.status.state == 'running'
 
     # let's change the status of the last job as failed
-    status = Status(**{'state': 'failed'})
+    status = Status(**{'state': 'failed', 'return_code': 'Error 1234'})
     response = rest_client.patch(f'{COMP_URL}private/jobs/{job_uid}/update', json=status.dict())
     assert response.status_code == 200
     # check that the status has been changed correctly
     job = rest_client.get(f'{COMP_URL}jobs/{job_uid}').json()
     mlex_job = MlexJob.parse_obj(job)
-    assert mlex_job.status.state == 'failed'
-    # check that the status has changed too
+    assert mlex_job.status.state == 'failed' and mlex_job.status.return_code == 'Error 1234'
+    # check that the worker status has changed too
     item = rest_client.get(f'{COMP_URL}workers/{worker.uid}').json()
     mlex_item = MlexWorker.parse_obj(item)
     assert mlex_item.status.state == 'warning'
