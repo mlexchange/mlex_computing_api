@@ -12,11 +12,11 @@ def submit_local_host():
     assert response.status_code == 200      # host was successfully submitted
 
 
-def submit_workflow():
+def submit_workflow(workflow):
     '''
     This function submits the workflow to the computing api
     '''
-    response = requests.post(f'{COMP_URL}workflows', json=workflow1)
+    response = requests.post(f'{COMP_URL}workflows', json=workflow)
     assert response.status_code == 200      # workflow was successfully submitted
 
 
@@ -40,10 +40,43 @@ job3 = {
     'working_directory': '',
 }
 
+job4 = {
+    'mlex_app': 'app4',
+    'job_kwargs': {'uri': 'mlexchange/k-means-dc', 'cmd': 'sleep 300'},
+    'working_directory': '',
+}
+
+job5 = {
+    'mlex_app': 'app5',
+    'job_kwargs': {'uri': 'mlexchange/k-means-dc', 'cmd': 'sleep 300'},
+    'working_directory': '',
+}
+
+job6 = {
+    'mlex_app': 'app4',
+    'job_kwargs': {'uri': 'mlexchange/k-means-dc', 'cmd': 'sleep 300'},
+    'working_directory': '',
+}
+
+job7 = {
+    'mlex_app': 'app1',
+    'job_kwargs': {'uri': 'mlexchange/k-means-dc', 'cmd': 'sleep 300'},
+    'working_directory': '',
+}
+
 workflow1 = {
     'user_uid': '001',
     'workflow_type': 'serial',
     'job_list': [job1, job2, job3],
+    'requirements': {'num_processors': 2,
+                     'num_gpus': 0,
+                     'num_nodes': 2}
+}
+
+workflow2 = {
+    'user_uid': '002',
+    'workflow_type': 'serial',
+    'job_list': [job4, job5, job6, job7],
     'requirements': {'num_processors': 2,
                      'num_gpus': 0,
                      'num_nodes': 2}
