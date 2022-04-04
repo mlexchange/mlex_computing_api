@@ -288,13 +288,13 @@ class ComputeService:
             Job that matches the query
         '''
         status = Status(**{"state": "running"})
-        item = self._collection_job_list.find_one_and_update({"uid": uid},
+        job = None
+        item = self._collection_job_list.find_one_and_update({"uid": uid, "status.state": "queue"},
                                                              {"$set": {"status": status.dict(),
                                                                        "timestamps.execution_time": datetime.utcnow()}})
-        if not item:
-            raise JobNotFound(f"no job with id: {uid}")
-        self._clean_id(item)
-        job = MlexJob.parse_obj(item)
+        if item:
+            self._clean_id(item)
+            job = MlexJob.parse_obj(item)
         return job
 
     def get_jobs(self,
@@ -400,13 +400,18 @@ class ComputeService:
         workflow = self.get_workflow(uid=workflow_uid)
         if not workflow:
             raise JobNotFound(f"no workflow with id: {workflow_uid}")
-
+        # terminate if if has not finalized yet
         self._collection_workflow_list.update_one(
-            {'uid': workflow_uid},
+            {'uid': workflow_uid, 'status.state': {'$nin': ['complete', 'failed', 'complete with errors']}},
             {'$set': {'terminate': True}}
+        )
+        self._collection_workflow_list.update_one(          # if the workflow is in queue, mark as canceled
+            {'uid': workflow_uid, 'status.state': 'queue'},
+            {'$set': {'terminate': True, 'status.state': 'canceled'}}
         )
         for worker in workflow.workers_list:
             self.terminate_worker(worker_uid=worker)
+        pass
 
     def update_worker(self, worker_uid: str, status: Status):
         '''
@@ -462,11 +467,18 @@ class ComputeService:
         worker = self.get_worker(uid=worker_uid)
         if not worker:
             raise WorkerNotFound(f"no worker with id: {worker_uid}")
-
+        # terminate if it has not been completed yet
         self._collection_worker_list.update_one(
-            {'uid': worker_uid},
+            {'uid': worker_uid, 'status.state': {'$nin': ['complete', 'failed', 'complete with errors']}},
             {'$set': {'terminate': True}}
         )
+        self._collection_worker_list.update_one(        # if the worker is in queue, mark as canceled
+            {'uid': worker_uid, 'status.state': 'queue'},
+            {'$set': {'terminate': True, 'status.state': 'canceled'}}
+        )
+        for job in worker.jobs_list:        # terminate the jobs in worker
+            self.terminate_job(job)
+        pass
 
     def update_job(self, job_uid: str, status: Status, logs: str = None):
         '''
@@ -527,10 +539,14 @@ class ComputeService:
         job = self._collection_job_list.find_one({"uid": job_uid})
         if not job:
             raise JobNotFound(f"no job with id: {job_uid}")
-
+        # terminate job if it has not finalized yet
         self._collection_job_list.update_one(
-            {'uid': job_uid},
+            {'uid': job_uid, 'status.state': {'$nin': ['complete', 'failed']}},
             {'$set': {'terminate': True}}
+        )
+        self._collection_job_list.update_one(               # if the job is in queue, mark as canceled
+            {'uid': job_uid, 'status.state': 'queue'},
+            {'$set': {'terminate': True, 'status.state': 'canceled'}}
         )
         pass
 
