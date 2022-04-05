@@ -30,7 +30,7 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "./ml_worker:/app"
     environment:
-      HOST_UID: 'd077798e-d46b-4246-99ce-18ad9a46ab7b'
+      HOST_UID: 'c04b396f-bb97-48aa-94ff-05aa7ec582a5'
       NUM_PROCESSORS: 2
       NETWORK: 'mlex_api_default'
     depends_on:

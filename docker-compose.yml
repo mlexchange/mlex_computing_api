@@ -14,70 +14,27 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: '${MONGO_DB_PASSWORD}'
     depends_on:
       - 'mongo'
-#    ports:
-#      - '8080:8080'
+    ports:
+      - '8080:8080'
 
-  ml-worker-cpu0:
+  worker-launcher:
     restart: 'unless-stopped'
-    container_name: 'ml-worker-cpu0'
+    container_name: 'worker-launcher'
     build:
       context: 'ml_worker'
       dockerfile: 'docker/Dockerfile'
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: '${MONGO_DB_USERNAME}'
-      MONGO_INITDB_ROOT_PASSWORD: '${MONGO_DB_PASSWORD}'
+    command: sh -c '
+      sleep 20 &&
+      python3 src/worker_launcher.py'
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "./ml_worker:/app"
+    environment:
+      HOST_UID: 'c04b396f-bb97-48aa-94ff-05aa7ec582a5'
+      NUM_PROCESSORS: 2
+      NETWORK: 'mlex_api_default'
     depends_on:
       - 'job-service'
-
-  ml-worker-cpu1:
-    restart: 'unless-stopped'
-    container_name: 'ml-worker-cpu1'
-    build:
-      context: 'ml_worker'
-      dockerfile: 'docker/Dockerfile'
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: '${MONGO_DB_USERNAME}'
-      MONGO_INITDB_ROOT_PASSWORD: '${MONGO_DB_PASSWORD}'
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock"
-      - "./ml_worker:/app"
-    depends_on:
-      - 'ml-worker-cpu0'
-
-  ml-worker-gpu0:
-    restart: 'unless-stopped'
-    container_name: 'ml-worker-gpu0'
-    build:
-      context: 'ml_worker'
-      dockerfile: 'docker/Dockerfile_gpu'
-    environment:
-      GPU: '0'
-      MONGO_INITDB_ROOT_USERNAME: '${MONGO_DB_USERNAME}'
-      MONGO_INITDB_ROOT_PASSWORD: '${MONGO_DB_PASSWORD}'
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock"
-      - "./ml_worker:/app"
-    depends_on:
-      - 'ml-worker-cpu1'
-
-  ml-worker-gpu1:
-    restart: 'unless-stopped'
-    container_name: 'ml-worker-gpu1'
-    build:
-      context: 'ml_worker'
-      dockerfile: 'docker/Dockerfile_gpu'
-    environment:
-      GPU: '1'
-      MONGO_INITDB_ROOT_USERNAME: '${MONGO_DB_USERNAME}'
-      MONGO_INITDB_ROOT_PASSWORD: '${MONGO_DB_PASSWORD}'
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock"
-      - "./ml_worker:/app"
-    depends_on:
-      - 'ml-worker-gpu0'
 
   mongo:
     image: mongo:4.4
