@@ -208,16 +208,17 @@ def get_next_job(uid: str) -> MlexJob:
 
 
 @app.get(API_URL_PREFIX + '/private/workers', tags=['private'])
-def get_next_worker(host_uid: str = None) -> MlexWorker:
+def get_next_worker(service_type: str, host_uid: str = None) -> MlexWorker:
     '''
     This function returns the next worker to be launched at host location and updates the status of this worker and the
     host resources in the database
     Args:
         host_uid:       Host uid
+        service_type:   Frontend, Backend, Hybrid
     Returns:
         Worker to be executed
     '''
-    next_worker = svc_context.comp_svc.get_next_worker(host_uid)
+    next_worker = svc_context.comp_svc.get_next_worker(host_uid, service_type)
     return next_worker
 
 

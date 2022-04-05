@@ -1,11 +1,13 @@
 from datetime import datetime
 from uuid import uuid4
 import math
+import random
 from pymongo.mongo_client import MongoClient
 from pymongo import ReturnDocument
 from typing import List
 
-from model import UserWorkflow, MlexWorkflow, MlexWorker, MlexJob, MlexHost, Status, WorkerRequirements
+from model import UserWorkflow, MlexWorkflow, MlexWorker, MlexJob, MlexHost, Status, WorkerRequirements, ServiceType, \
+                  Constraints
 
 
 class JobNotFound(Exception):
@@ -42,10 +44,8 @@ class ComputeService:
         '''
         host.uid = str(uuid4())
         mlex_host = MlexHost.parse_obj(host)
-        if mlex_host.num_available_processors == 0:
-            mlex_host.num_available_processors = mlex_host.max_processors
-        if mlex_host.num_available_gpus == 0:
-            mlex_host.num_available_gpus = mlex_host.max_gpus
+        mlex_host.frontend_available = mlex_host.frontend_constraints
+        mlex_host.backend_available = mlex_host.backend_constraints
         mlex_host_dict = mlex_host.dict()
         self._collection_resources_list.insert_one(mlex_host_dict)
         return mlex_host.uid
@@ -60,15 +60,7 @@ class ComputeService:
         '''
         workflow.uid = str(uuid4())
         mlex_workflow = MlexWorkflow.parse_obj(workflow)
-        # if mlex_workflow.valid:
-        mlex_jobs = workflow.job_list
-        mlex_jobs_dict = []
-        for job in mlex_jobs:
-            job.uid = str(uuid4())
-            mlex_jobs_dict.append(job.dict())
-        mlex_workers_dict, workers_uids = self.split_workers(workflow)
-        mlex_workflow.workers_list = workers_uids
-        mlex_workflow_dict = mlex_workflow.dict()
+        mlex_workflow_dict, mlex_workers_dict, mlex_jobs_dict = self.split_workers(workflow)
         self._collection_workflow_list.insert_one(mlex_workflow_dict)
         self._collection_worker_list.insert_many(mlex_workers_dict)
         self._collection_job_list.insert_many(mlex_jobs_dict)
@@ -210,27 +202,53 @@ class ComputeService:
         return workers
 
     def get_next_worker(self,
-                        host_uid: str
+                        host_uid: str,
+                        service_type: ServiceType,
                         ) -> MlexWorker:
         '''
         Finds next worker in queue to be executed at host location and update the status of the worker and the resources
         at the host location
         Args:
             host_uid:       host uid
+            service_type:   frontend, backend, or hybrid
         Returns:
             Next worker to be executed
         '''
         mlex_host = self.get_host(host_uid=host_uid)
         worker = None
         if mlex_host:
-            if mlex_host.num_running_workers < mlex_host.max_nodes:
-                available_processors = mlex_host.num_available_processors
-                available_gpus = mlex_host.num_available_gpus
-                list_gpus = mlex_host.list_available_gpus
-                # get next worker
+            if service_type == "frontend":
+                available_processors = mlex_host.frontend_available.num_processors
+                available_gpus = mlex_host.frontend_available.num_gpus
+                list_gpus = mlex_host.frontend_available.list_gpus
+                available_workers = mlex_host.frontend_available.num_nodes
+
+            if service_type == "backend":
+                available_processors = mlex_host.backend_available.num_processors
+                available_gpus = mlex_host.backend_available.num_gpus
+                list_gpus = mlex_host.backend_available.list_gpus
+                available_workers = mlex_host.backend_available.num_nodes
+
+            if service_type == "hybrid":
+                f_num_processors = mlex_host.frontend_available.num_processors
+                b_num_processors = mlex_host.backend_available.num_processors
+                available_processors =  b_num_processors + f_num_processors
+
+                f_num_gpus = mlex_host.frontend_available.num_gpus
+                b_num_gpus = mlex_host.backend_available.num_gpus
+                available_gpus = f_num_gpus + b_num_gpus
+
+                f_gpus = mlex_host.frontend_available.list_gpus
+                b_gpus = mlex_host.backend_available.list_gpus
+
+                f_num_nodes = mlex_host.frontend_available.num_nodes
+                b_num_nodes = mlex_host.backend_available.num_nodes
+                available_workers = f_num_nodes + b_num_nodes
+            if available_workers > 0:
                 next_worker = self._collection_worker_list.find_one_and_update(
                     {
                         "host_uid": host_uid,
+                        "service_type": service_type,
                         "status.state": "queue",
                         "requirements.num_processors": {'$lte': available_processors},
                         "requirements.num_gpus": {'$lte': available_gpus}
@@ -238,26 +256,72 @@ class ComputeService:
                     {"$set": {"status.state": "running", "timestamps.execution_time": datetime.utcnow()},
                      # "$push": {"requirements.list_gpus": {"$each": list_gpus, "$slice": "$$num_gpus"}}},
                      },
-                    return_document = ReturnDocument.AFTER)     # returns the updated worker
-                if next_worker:     # if a new worker can be launched, update the available resources status in host
+                    return_document=ReturnDocument.AFTER)  # returns the updated worker
+
+                if next_worker:  # if a new worker can be launched, update the available resources status in host
                     self._clean_id(next_worker)
                     worker = MlexWorker.parse_obj(next_worker)
-                    worker_gpus = worker.requirements.num_gpus
-                    worker = self._collection_worker_list.find_one_and_update(
-                        {"uid": worker.uid},
-                        {"$set": {"requirements.list_gpus": list_gpus[0:worker_gpus]}},
-                        return_document=ReturnDocument.AFTER
-                    )
-                    worker = MlexWorker.parse_obj(worker)
-                    available_processors -= worker.requirements.num_processors
-                    available_gpus -= worker.requirements.num_gpus
-                    del list_gpus[0:worker_gpus]
-                    running_workers = mlex_host.num_running_workers + 1
-                    self._collection_resources_list.update_one({"uid": host_uid},
-                                                               {"$set": {"num_available_processors": available_processors,
-                                                                         "num_available_gpus": available_gpus,
-                                                                         "list_available_gpus": list_gpus,
-                                                                         "num_running_workers": running_workers}})
+                    num_processors = worker.requirements.num_processors
+                    num_gpus = worker.requirements.num_gpus
+                    if service_type == 'hybrid':
+                        (f_av_num_gpus, b_av_num_gpus), (f_aloc_num_gpus, b_aloc_num_gpus) = \
+                            self.update_hybrid_resources(f_num_gpus, b_num_gpus, num_gpus)
+                        (f_av_num_processors, b_av_num_processors), (f_aloc_num_processors, b_aloc_num_processors) = \
+                            self.update_hybrid_resources(f_num_processors, b_num_processors, num_processors)
+                        (f_av_num_nodes, b_av_num_nodes), (f_aloc_num_nodes, b_aloc_num_nodes) = \
+                            self.update_hybrid_resources(f_num_nodes, b_num_nodes, 1)
+                        worker = self._collection_worker_list.find_one_and_update(
+                            {"uid": worker.uid},
+                            {"$set": {"requirements.list_gpus": f_gpus[0:f_aloc_num_gpus] + b_gpus[0:b_aloc_num_gpus],
+                                      "requirements.kwargs": {
+                                          "num_processors": f_aloc_num_processors,
+                                          "num_gpus": f_aloc_num_gpus,
+                                          "list_gpus": f_gpus[0:f_aloc_num_gpus],
+                                          "num_nodes": f_aloc_num_nodes
+                                      }
+                             }},return_document = ReturnDocument.AFTER
+                        )
+                        del f_gpus[0:f_aloc_num_gpus]
+                        del b_gpus[0:b_aloc_num_gpus]
+                        self._collection_resources_list.update_one(
+                            {"uid": host_uid},
+                            {"$set": {
+                                "frontend_available.num_processors": f_av_num_processors,
+                                "frontend_available.num_gpus": f_av_num_gpus,
+                                "frontend_available.list_gpus": f_gpus,
+                                "frontend_available.num_nodes": f_av_num_nodes,
+                                "backend_available.num_processors": b_av_num_processors,
+                                "backend_available.num_gpus": b_av_num_gpus,
+                                "backend_available.list_gpus": b_gpus,
+                                "backend_available.num_nodes": b_av_num_nodes}})
+
+                    else:
+                        worker = self._collection_worker_list.find_one_and_update(
+                            {"uid": worker.uid},
+                            {"$set": {"requirements.list_gpus": list_gpus[0:num_gpus]}},
+                            return_document=ReturnDocument.AFTER
+                        )
+                        available_processors -= num_processors
+                        available_gpus -= num_gpus
+                        del list_gpus[0:num_gpus]
+                        available_workers -= 1
+                        if service_type == "frontend":
+                            self._collection_resources_list.update_one(
+                                {"uid": host_uid},
+                                {"$set": {
+                                    "frontend_available.num_processors": available_processors,
+                                    "frontend_available.num_gpus": available_gpus,
+                                    "frontend_available.list_gpus": list_gpus,
+                                    "frontend_available.num_nodes": available_workers}})
+                        if service_type == "backend":
+                            self._collection_resources_list.update_one(
+                                {"uid": host_uid},
+                                {"$set": {
+                                    "backend_available.num_processors": available_processors,
+                                    "backend_available.num_gpus": available_gpus,
+                                    "backend_available.list_gpus": list_gpus,
+                                    "backend_available.num_nodes": available_workers}})
+                    self._clean_id(worker)
         return worker
 
     def get_job(self,
@@ -344,24 +408,52 @@ class ComputeService:
             jobs.append(MlexJob.parse_obj(item))
         return jobs
 
-    def update_host(self, host_uid: str, worker_requirements: WorkerRequirements):
+    def update_host(self, host_uid: str, worker_requirements: WorkerRequirements, service_type: ServiceType):
         '''
         Releases the computing resources back to the host
         Args:
             host_uid:               Host unique identifier
             worker_requirements:    Work requirements
+            service_type:           Backend, Frontend, Hybrid
         Returns:
             None
         '''
         num_processors = worker_requirements.num_processors
         num_gpus = worker_requirements.num_gpus
         list_gpus = worker_requirements.list_gpus
-        self._collection_resources_list.update_one({"uid": host_uid},
-                                                   {"$addToSet": {"list_available_gpus": {"$each": list_gpus}},
-                                                    "$inc": {"num_available_processors": num_processors,
-                                                             "num_available_gpus": num_gpus,
-                                                             "num_running_workers": -1}
-                                                    })
+        if service_type == 'frontend':
+            self._collection_resources_list.update_one(
+                {"uid": host_uid},
+                {"$addToSet": {"frontend_available.list_gpus": {"$each": list_gpus}},
+                 "$inc": {"frontend_available.num_available_processors": num_processors,
+                          "frontend_available.num_available_gpus": num_gpus,
+                          "frontend_available.num_nodes": 1}
+                 })
+        if service_type == 'backend':
+            self._collection_resources_list.update_one(
+                {"uid": host_uid},
+                {"$addToSet": {"backend_available.list_gpus": {"$each": list_gpus}},
+                 "$inc": {"backend_available.num_processors": num_processors,
+                          "backend_available.num_gpus": num_gpus,
+                          "backend_available.num_nodes": 1}
+                 })
+        if service_type == 'hybrid':
+            frontend_specs = Constraints.parse_obj(worker_requirements.kwargs)
+            f_num_processors = frontend_specs.num_processors
+            f_num_gpus = frontend_specs.num_gpus
+            f_list_gpus = frontend_specs.list_gpus
+            f_num_workers = frontend_specs.num_nodes
+            self._collection_resources_list.update_one(
+                {"uid": host_uid},
+                {"$addToSet": {"frontend_available.list_gpus": {"$each": f_list_gpus},
+                               "backend_available.list_gpus": {"$each": list(set(list_gpus)^set(f_list_gpus))}},
+                 "$inc": {"frontend_available.num_processors": f_num_processors,
+                          "frontend_available.num_gpus": f_num_gpus,
+                          "frontend_available.num_nodes": f_num_workers,
+                          "backend_available.num_processors": num_processors - f_num_processors,
+                          "backend_available.num_gpus": num_gpus - f_num_gpus,
+                          "backend_available.num_nodes": 1 - f_num_workers}
+                 })
         pass
 
     def update_workflow(self, workflow_uid: str, status: Status):
@@ -428,7 +520,7 @@ class ComputeService:
                 self._collection_worker_list.update_one(
                     {'uid': worker_uid},
                     {'$set': {'status': status.dict(), "timestamps.end_time": datetime.utcnow()}})
-                self.update_host(worker.host_uid, worker.requirements)
+                self.update_host(worker.host_uid, worker.requirements, worker.service_type)
             else:
                 self._collection_worker_list.update_one(
                     {'uid': worker_uid},
@@ -576,28 +668,45 @@ class ComputeService:
             num_processors = requirements.num_processors
             num_gpus = requirements.num_gpus
             host_uid = requirements.host_uid
-
-        jobs_uid = [job.uid for job in user_workflow.job_list]
+        mlex_jobs_dict = []
+        jobs_uid = []
+        services_type = []
+        for job in user_workflow.job_list:
+            job.uid = str(uuid4())
+            jobs_uid.append(job.uid)                    # job uid
+            services_type.append(job.service_type)      # frontend vs backend
+            mlex_jobs_dict.append(job.dict())
         num_jobs_per_node = math.ceil(len(job_list) / num_nodes)
-        workers = []
+        mlex_workers_dict = []
         worker_uid_list = []
         for node in range(num_nodes):
             if constraints:
                 num_processors = list_num_processors[node]
                 num_gpus = list_num_gpus[node]
-
             host = self.get_host()
-            host_uid = MlexHost.parse_obj(host).uid      # assigning first host for now! **warning**
+            host_uid = MlexHost.parse_obj(host).uid     # assigning first host for now! **warning**
             # host_uid = reserve_comp_resources(host_uid=host_uid, num_processors=num_processors, num_gpus=num_gpus)  # reserves comp resources
             jobs_in_node = jobs_uid[node * num_jobs_per_node:(node + 1) * num_jobs_per_node]
+            services_in_node = services_type[node * num_jobs_per_node:(node + 1) * num_jobs_per_node]
+            if len(set(services_in_node))==1:
+                service_type = services_in_node[0]      # if all are frontend or backend
+            else:
+                service_type = 'hybrid'
             worker = MlexWorker(uid=str(uuid4()),
+                                service_type=service_type,
                                 host_uid=host_uid,
                                 jobs_list=jobs_in_node,
                                 requirements=WorkerRequirements.parse_obj(requirements))
             worker_uid_list.append(worker.uid)
             worker_dict = worker.dict()
-            workers.append(worker_dict)
-        return workers, worker_uid_list
+            mlex_workers_dict.append(worker_dict)
+        if len(set(services_type)) == 1:
+            workflow_service_type = services_type[0]    # if all are frontend or backend
+        else:
+            workflow_service_type = 'hybrid'
+        user_workflow.workers_list = worker_uid_list
+        user_workflow.service_type = workflow_service_type
+        return user_workflow.dict(), mlex_workers_dict, mlex_jobs_dict
 
     def _create_indexes(self):
         self._collection_workflow_list.create_index([('uid', 1)], unique=True)
@@ -617,10 +726,33 @@ class ComputeService:
 
     @staticmethod
     def _clean_id(data):
-        """ Removes mongo ID
+        """
+        Removes the mongo ID
         """
         if '_id' in data:
             del data['_id']
+
+    @staticmethod
+    def update_hybrid_resources(front, back, job):
+        '''
+        Distributes the job resources to both frontend and backend sources
+        Args:
+            front:              Total number of frontend resources
+            back:               Total number of backend resources
+            job:                Number of resources requested by the job
+        Returns:
+            front_assigned:     Number of frontend resources allocated for the job
+            back_assigned:      Number of backend resources allocated for the job
+        '''
+        if job>0:
+            min_val = max((job-back)/job, 0)*job
+            max_val = min(front/job, 1)*job
+            front_assigned = random.randint(min_val, max_val)
+            back_assigned = job - front_assigned
+        else:
+            front_assigned = 0
+            back_assigned = 0
+        return (front - front_assigned, back - back_assigned), (front_assigned, back_assigned)
 
 
 class Context:

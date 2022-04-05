@@ -14,13 +14,13 @@ def init_logging():
                         level=logging.INFO)
 
 
-def get_next_worker():
+def get_next_worker(service_type):
     '''
     This function returns the next worker in queue that matches the available compute resources at the host
     Returns:
         worker:     [MlexWorker]
     '''
-    response = requests.get(f'{COMP_API_URL}workers', params={'host_uid': HOST_UID})
+    response = requests.get(f'{COMP_API_URL}workers', params={'service_type': service_type, 'host_uid': HOST_UID})
     worker = response.json()
     if worker:
         worker = MlexWorker.parse_obj(worker)
@@ -51,8 +51,17 @@ DOCKER_CLIENT = docker.from_env()
 
 if __name__ == '__main__':
     init_logging()
+    cont = -1
     while True:
-        new_worker = get_next_worker()
+        cont += 1
+        if cont < 5:
+            new_worker = get_next_worker('frontend')
+        elif cont < 7:
+            new_worker = get_next_worker('hybrid')
+        elif cont < 9:
+            new_worker = get_next_worker('backend')
+        else:
+            cont = -1
         if new_worker:
             try:
                 worker_info = json.dumps(new_worker.dict(), default=str)

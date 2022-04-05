@@ -23,6 +23,7 @@ def submit_workflow(workflow):
 #################################################### TEST ELEMENTS ####################################################
 job1 = {
     'mlex_app': 'seg-demo',
+    'service_type': 'backend',
     'job_kwargs': {'uri': 'mlexchange/k-means-dc',
                    'cmd': 'python kmeans.py data/images/segment_series.tif data/model \'{"n_clusters":2, "max_iter":300}\''},
     'working_directory': '/Users/tanchavez/Documents/Coding/Repositories/Direct/mlex_kmeans/data',
@@ -30,36 +31,42 @@ job1 = {
 
 job2 = {
     'mlex_app': 'mlcoach',
+    'service_type': 'backend',
     'job_kwargs': {'uri': 'mlexchange/k-means-dc', 'cmd': 'sleep 30'},
     'working_directory': '',
 }
 
 job3 = {
     'mlex_app': 'data-clinic',
+    'service_type': 'backend',
     'job_kwargs': {'uri': 'mlexchange/k-means-dc', 'cmd': 'sleep 45'},
     'working_directory': '',
 }
 
 job4 = {
     'mlex_app': 'app4',
-    'job_kwargs': {'uri': 'mlexchange/k-means-dc', 'cmd': 'sleep 300'},
-    'working_directory': '',
+    'service_type': 'backend',
+    'job_kwargs': {'uri': 'mlexchange/colorwheel-notebook:latest', 'cmd': 'python src/frontend.py', 'port': [8061]},
+    'working_directory': '/Users/tanchavez/Documents/Coding/Repositories/Forks/mlex_colorwheel/data',
 }
 
 job5 = {
     'mlex_app': 'app5',
+    'service_type': 'frontend',
     'job_kwargs': {'uri': 'mlexchange/k-means-dc', 'cmd': 'sleep 300'},
     'working_directory': '',
 }
 
 job6 = {
     'mlex_app': 'app4',
+    'service_type': 'backend',
     'job_kwargs': {'uri': 'mlexchange/k-means-dc', 'cmd': 'sleep 300'},
     'working_directory': '',
 }
 
 job7 = {
     'mlex_app': 'app1',
+    'service_type': 'frontend',
     'job_kwargs': {'uri': 'mlexchange/k-means-dc', 'cmd': 'sleep 300'},
     'working_directory': '',
 }
@@ -85,11 +92,12 @@ workflow2 = {
 host1 = {
     'nickname': 'local',
     'hostname': 'local.als.lbl.gov',
-    'max_nodes': 2,
-    'max_processors': 10,
-    'max_gpus': 0,
-    'num_available_processors': 10,
-    'num_available_gpus': 0,
-    'list_available_gpus': [],
-    'num_running_workers': 0
+    'frontend_constraints': {'num_processors': 10,
+                             'num_gpus': 0,
+                             'list_gpus': [],
+                             'num_nodes': 2},
+    'backend_constraints': {'num_processors': 5,
+                             'num_gpus': 0,
+                             'list_gpus': [],
+                             'num_nodes': 2},
 }

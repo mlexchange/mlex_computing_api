@@ -63,13 +63,12 @@ def test_get_next_workers(rest_client: TestClient):
     # get initial values for comparison
     host = rest_client.get(f'{COMP_URL}hosts').json()
     mlex_host = MlexHost.parse_obj(host)
-    init_num_available_processors = mlex_host.num_available_processors
-    init_num_available_gpus = mlex_host.num_available_gpus
-    init_num_running_workers = mlex_host.num_running_workers
-    init_list_available_gpus = mlex_host.list_available_gpus
+    init_frontend_available = mlex_host.frontend_available
+    init_backend_available = mlex_host.backend_available
 
     # get next worker
-    response = rest_client.get(f'{COMP_URL}private/workers', params={'host_uid': mlex_host.uid}).json()
+    response = rest_client.get(f'{COMP_URL}private/workers', params={'host_uid': mlex_host.uid,
+                                                                     'service_type': 'backend'}).json()
     worker = MlexWorker.parse_obj(response)
     num_processors = worker.requirements.num_processors
     num_gpus = worker.requirements.num_gpus
@@ -78,28 +77,43 @@ def test_get_next_workers(rest_client: TestClient):
     # get final values for comparison
     host = rest_client.get(f'{COMP_URL}hosts').json()
     mlex_host = MlexHost.parse_obj(host)
-    latest_num_available_processors = mlex_host.num_available_processors
-    latest_num_available_gpus = mlex_host.num_available_gpus
-    latest_num_running_workers = mlex_host.num_running_workers
-    latest_list_available_gpus = mlex_host.list_available_gpus
-    print(latest_list_available_gpus)
+    final_frontend_available = mlex_host.frontend_available
+    final_backend_available = mlex_host.backend_available
 
-    # check that the resources have been updated
-    if init_num_available_processors-latest_num_available_processors == num_processors and \
-        init_num_available_gpus-latest_num_available_gpus == num_gpus and \
-        latest_num_running_workers - init_num_running_workers == 1 and \
-        init_list_available_gpus == assigned_gpus + latest_list_available_gpus :
-        requirements_ok = True
-    else:
-        requirements_ok = False
-    assert worker.host_uid == mlex_host.uid and requirements_ok and worker.status.state == 'running'
+    if worker.service_type == 'frontend':
+        assert final_frontend_available.num_processors == init_frontend_available.num_processors - num_processors
+        assert final_frontend_available.num_gpus == init_frontend_available.num_gpus - num_gpus
+        assert init_frontend_available.list_gpus == assigned_gpus + final_frontend_available.list_gpus
+        assert init_frontend_available.num_nodes == final_frontend_available.num_nodes + 1
+
+        assert final_backend_available == init_backend_available
+
+    if worker.service_type == 'backend':
+        assert final_backend_available.num_processors == init_backend_available.num_processors - num_processors
+        assert final_backend_available.num_gpus == init_backend_available.num_gpus - num_gpus
+        assert init_backend_available.list_gpus == assigned_gpus + final_backend_available.list_gpus
+        assert init_backend_available.num_nodes == final_backend_available.num_nodes + 1
+
+        assert final_frontend_available == init_frontend_available
+
+    if worker.service_type == 'hybrid':
+        assert final_frontend_available.num_processors + final_backend_available.num_processors == \
+               init_frontend_available.num_processors + init_backend_available.num_processors - num_processors
+        assert final_frontend_available.num_gpus + final_backend_available.num_gpus == \
+               init_frontend_available.num_gpus + init_backend_available.num_gpus - num_gpus
+        assert list(set(init_frontend_available.list_gpus + init_backend_available.list_gpus) ^ \
+               set(final_frontend_available.list_gpus + final_backend_available.list_gpus)) == assigned_gpus
+        assert init_frontend_available.num_nodes + init_backend_available.num_nodes ==\
+               final_frontend_available.num_nodes + final_backend_available.num_nodes + 1
+    assert worker.host_uid == mlex_host.uid and worker.status.state == 'running'
 
 
 def test_update_status(rest_client: TestClient):
     # get next worker
     host = rest_client.get(f'{COMP_URL}hosts').json()
     mlex_host = MlexHost.parse_obj(host)
-    response = rest_client.get(f'{COMP_URL}private/workers', params={'host_uid': mlex_host.uid}).json()
+    response = rest_client.get(f'{COMP_URL}private/workers', params={'host_uid': mlex_host.uid,
+                                                                     'service_type': 'hybrid'}).json()
     worker = MlexWorker.parse_obj(response)
     # change the status of the jobs in this worker
     for job_uid in worker.jobs_list:
@@ -191,24 +205,28 @@ def test_terminate_processes(rest_client: TestClient):
 
 #################################################### TEST ELEMENTS ####################################################
 job1 = {
+    'service_type': 'backend',
     'mlex_app': 'seg-demo',
     'job_kwargs': {'uri': 'image', 'cmd': 'python3'},
     'working_directory': 'home',
 }
 
 job2 = {
+    'service_type': 'backend',
     'mlex_app': 'mlcoach',
     'job_kwargs': {'uri': 'image', 'cmd': 'python3'},
     'working_directory': 'home',
 }
 
 job3 = {
+    'service_type': 'frontend',
     'mlex_app': 'clinic',
     'job_kwargs': {'uri': 'image', 'cmd': 'python3'},
     'working_directory': 'home',
 }
 
 job4 = {
+    'service_type': 'backend',
     'mlex_app': 'seg-demo',
     'job_kwargs': {'uri': 'image', 'cmd': 'python3'},
     'working_directory': 'home',
@@ -226,11 +244,12 @@ workflow1 = {
 host1 = {
     'nickname': 'vaughan',
     'hostname': 'vaughan.als.lbl.gov',
-    'max_nodes': 20,
-    'max_processors': 10,
-    'max_gpus': 2,
-    'num_available_processors': 10,
-    'num_available_gpus': 2,
-    'list_available_gpus': [0, 1],
-    'num_running_workers': 10
+    'frontend_constraints': {'num_processors': 10,
+                             'num_gpus': 2,
+                             'list_gpus': [0,3],
+                             'num_nodes': 5},
+    'backend_constraints': {'num_processors': 5,
+                             'num_gpus': 2,
+                             'list_gpus': [1, 2],
+                             'num_nodes': 2},
 }

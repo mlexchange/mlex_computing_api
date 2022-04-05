@@ -22,6 +22,12 @@ class WorkflowType(str, Enum):
     parallel = "parallel"
 
 
+class ServiceType(str, Enum):
+    frontend = "frontend"
+    backend = "backend"
+    hybrid = "hybrid"
+
+
 ###################################################### SUBCLASSES ######################################################
 class Status(BaseModel):
     state: States
@@ -38,22 +44,24 @@ class DockerJob(BaseModel):
     uri: str = Field(description="container uri")
     type: str = 'docker'
     cmd: str = Field(description="command to run")
-    # logs: Optional[str] = Field(description="container logs")
+    port: Optional[List[int]] = Field(description="port to expose")
     kwargs: Optional[dict] = Field(description="container kwargs")
 
 
-class Constraints(BaseModel):
-    num_nodes: Optional[int] = Field(description="number of nodes")
-    num_processors: Optional[int] = Field(description="number of processors per node")
-    num_gpus: Optional[int] = Field(description="number of GPUs per node")
-
-
-class WorkerRequirements(BaseModel):
+class Resources(BaseModel):
     num_processors: Optional[int] = Field(description="number of processors per node")
     num_gpus: Optional[int] = Field(description="number of GPUs per node")
     list_gpus: Optional[List[int]] = []
+
+
+class Constraints(Resources):
+    num_nodes: Optional[int] = Field(description="number of nodes")
+
+
+class WorkerRequirements(Resources):
     bank: Optional[str] = Field(description="bank/account")
     timeout: Optional[float] = Field(description="time limit in minutes")
+    kwargs: Optional[dict]
 
 
 class CompRequirements(WorkerRequirements):
@@ -70,19 +78,21 @@ DEFAULT_JOB_PID = str(0)
 DEFAULT_UID_LIST = [DEFAULT_UID]
 DEFAULT_STATUS = Status(**{'state': 'queue'})
 DEFAULT_LOGS = ''
+DEFAULT_SERVICE = 'hybrid'
+DEFAULT_CONSTRAINTS = {'num_processors': 0,
+                       'num_gpus': 0,
+                       'list_gpus': [],
+                       'num_nodes': 0}
 
 
 class MlexHost(BaseModel):
     uid: str = DEFAULT_UID
     nickname: str = Field(description="host nickname")
     hostname: str = Field(description="remote host name")
-    max_nodes: Optional[int] = Field(description="maximum number of nodes in host")
-    max_processors: Optional[int] = Field(description="maximum number of processors in host")
-    max_gpus: Optional[int] = Field(description="maximum number of GPUs in host")
-    num_available_processors: Optional[int] = Field(description="number of available processors")
-    num_available_gpus: Optional[int] = Field(description="number of available gpus")
-    list_available_gpus: Optional[List[int]] = Field(description="list of available gpus")
-    num_running_workers: Optional[int] = Field(description="number of running workers")
+    frontend_constraints: Constraints           # maximum resources
+    backend_constraints: Constraints
+    frontend_available: Constraints = DEFAULT_CONSTRAINTS             # resources currently available
+    backend_available: Constraints = DEFAULT_CONSTRAINTS
 
 
 class BasicAsset(BaseModel):
@@ -94,8 +104,8 @@ class BasicAsset(BaseModel):
 
 
 class MlexJob(BasicAsset):
+    service_type: ServiceType
     mlex_app: str = Field(description="MLExchange app associated with the job")
-    description: Optional[dict] = Field(description="job description")
     job_kwargs: Union[DockerJob]
     working_directory: str = Field(description="dataset uri")
     status: Status = DEFAULT_STATUS
@@ -106,6 +116,7 @@ class MlexJob(BasicAsset):
 
 
 class MlexWorker(BasicAsset):
+    service_type: ServiceType
     host_uid: str = Field(description='remote MLExchange host identifier')
     status: Status = DEFAULT_STATUS
     jobs_list: List[str] = DEFAULT_UID_LIST
@@ -115,6 +126,7 @@ class MlexWorker(BasicAsset):
 
 
 class MlexWorkflow(BasicAsset):
+    service_type: ServiceType = DEFAULT_SERVICE
     user_uid: str = Field(description='user identifier')
     workflow_type: WorkflowType = Field(description='sequential vs parallel')
     workers_list: List[str] = DEFAULT_UID_LIST

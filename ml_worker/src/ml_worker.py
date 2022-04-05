@@ -133,13 +133,17 @@ if __name__ == '__main__':
                 docker_job = new_job.job_kwargs
                 cmd = docker_job.cmd
                 volumes = []
-                device_requests = []
                 if len(new_job.working_directory)>0:
                     volumes = ['{}:/app/work/data'.format(new_job.working_directory)]
                     cmd = f"tree -ifo /tmp/file_record_init.txt ; {cmd} ; tree -ifo /tmp/file_record_final.txt"
                     cmd = f'bash -c {json.dumps(cmd)}'
                 else:
-                    file_record = None
+                    file_record = None              # Not reporting assets
+                ports = {}
+                if docker_job.port:
+                    for port in docker_job.port:
+                        ports[f'{port}/tcp'] = None     # assigns random port
+                device_requests = []
                 if len(list_gpus)>0:
                     device_requests=[docker.types.DeviceRequest(device_ids=list_gpus,
                                                                 capabilities=[['gpu']]
@@ -148,14 +152,17 @@ if __name__ == '__main__':
                                                          cpu_count=num_processors,
                                                          device_requests=device_requests,
                                                          command=cmd,
+                                                         ports=ports,
                                                          volumes=volumes,
                                                          detach=True)
             except Exception as err:
                 logging.error(f'Job {new_job.uid} failed: {str(err)}')
                 update_job_status(new_job.uid, status=Status(state="failed", return_code=str(err)))
             else:
+                container.reload()      # to get the ports
+                logging.info(f'Job {new_job.uid} running: {container.ports}')
                 while container.status == 'created' or container.status == 'running':
-                    new_job = get_job(job_uid)          # gets current state of the job in database to check if terminated
+                    new_job = get_job(job_uid)      # gets current state of the job in database to check if terminated
                     if new_job.terminate:
                         output = container.logs(stdout=True)            # retrieve last logs and outputs
                         container.kill()                                # kill container
