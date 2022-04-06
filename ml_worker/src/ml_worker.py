@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import time
 
 import docker
@@ -22,13 +23,12 @@ class DispatchService:
         if uid:
             item = self._collection_job_list.find_one({"uid": uid})
         else:
-            item = self._collection_job_list.find_one_and_update({"status": "sent_queue"},
+            item = self._collection_job_list.find_one_and_update({"status": "sent_queue", "gpu" : False},
                                                                  {'$set': {'status': "running"}})
         if item:
             item = self.clean_id(item)
             return SimpleJob.parse_obj(item)
-        else:
-            return None
+        return None
 
     def update_status(self, uid, status, err=None):
         if err:
@@ -71,8 +71,10 @@ def init_logging():
 
 
 config = Config(".env")
-MONGO_DB_URI = config("MONGO_DB_URI", cast=str, default="mongodb://mongodb:27017/job_list")
 JOB_MANAGER_LOG_LEVEL = config("JOB_MANAGER_LOG_LEVEL", cast=str, default="INFO")
+MONGO_DB_USERNAME = str(os.environ['MONGO_INITDB_ROOT_USERNAME'])
+MONGO_DB_PASSWORD = str(os.environ['MONGO_INITDB_ROOT_PASSWORD'])
+MONGO_DB_URI = "mongodb://%s:%s@mongodb:27017/?authSource=admin" % (MONGO_DB_USERNAME, MONGO_DB_PASSWORD)
 
 svc_context = Context
 
@@ -128,7 +130,7 @@ if __name__ == '__main__':
                             pass
                         err = "Code: "+str(result["StatusCode"])+ " Error: " + repr(result["Error"])
                         svc_context.job_svc.update_status(new_job.uid, "failed", err)
-            # container.remove()
+            container.remove()
         else:
             # Idle for 5 seconds if no job is found
             time.sleep(5)
