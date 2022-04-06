@@ -71,6 +71,13 @@ job7 = {
     'working_directory': '',
 }
 
+job8 = {
+    'mlex_app': 'app1',
+    'service_type': 'frontend',
+    'job_kwargs': {'uri': 'mlex_colorwheel_colorwheel', 'cmd': 'python src/frontend.py', 'port': [8050]},
+    'working_directory': '/data/tanchavez/Repositories/Forks/',
+}
+
 workflow1 = {
     'user_uid': '001',
     'workflow_type': 'serial',
@@ -87,6 +94,15 @@ workflow2 = {
     'requirements': {'num_processors': 2,
                      'num_gpus': 0,
                      'num_nodes': 2}
+}
+
+workflow3 = {
+    'user_uid': '002',
+    'workflow_type': 'serial',
+    'job_list': [job8],
+    'requirements': {'num_processors': 2,
+                     'num_gpus': 1,
+                     'num_nodes': 1}
 }
 
 host1 = {
