@@ -17,6 +17,9 @@ test:
 	echo ${ID_USER}
 
 build_docker: 
+	docker build -t ${IMG_WEB_SVC} -f ./docker/Dockerfile .
+
+build_docker_arm64: 
 	docker build -t ${IMG_WEB_SVC} -f ./docker/Dockerfile_arm64 .
 
 clean: 
