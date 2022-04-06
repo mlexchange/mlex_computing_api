@@ -4,7 +4,6 @@ services:
   job-service:
     restart: 'unless-stopped'
     container_name: 'job-service'
-    user: '${UID}:${GID}'
     build:
       context: 'job_manager'
       dockerfile: 'docker/Dockerfile'
@@ -30,9 +29,9 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "./ml_worker:/app"
     environment:
-      HOST_UID: 'c04b396f-bb97-48aa-94ff-05aa7ec582a5'
-      NUM_PROCESSORS: 2
-      NETWORK: 'mlex_api_default'
+      NUM_PROCESSORS: '${NUM_PROCESSORS}'
+      NETWORK: '${COMPOSE_PROJECT_NAME}_default'
+      HOST: '${HOST}'
     depends_on:
       - 'job-service'
 
