@@ -51,7 +51,7 @@ class DockerJob(BaseModel):
 class Resources(BaseModel):
     num_processors: Optional[int] = Field(description="number of processors per node")
     num_gpus: Optional[int] = Field(description="number of GPUs per node")
-    list_gpus: Optional[List[int]] = []
+    list_gpus: Optional[List[str]] = []
 
 
 class Constraints(Resources):

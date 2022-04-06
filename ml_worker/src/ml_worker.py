@@ -145,9 +145,9 @@ if __name__ == '__main__':
                         ports[f'{port}/tcp'] = None     # assigns random port
                 device_requests = []
                 if len(list_gpus)>0:
-                    device_requests=[docker.types.DeviceRequest(device_ids=list_gpus,
-                                                                capabilities=[['gpu']]
-                                                                )],
+                    device_requests.append(docker.types.DeviceRequest(device_ids=list_gpus,
+                                                                      capabilities=[['gpu']]
+                                                                      )),
                 container = DOCKER_CLIENT.containers.run(docker_job.uri,
                                                          cpu_count=num_processors,
                                                          device_requests=device_requests,
