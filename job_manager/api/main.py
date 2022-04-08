@@ -43,7 +43,7 @@ svc_context = Context
 
 
 @app.on_event("startup")
-async def startup_event():
+def startup_event():
     from pymongo import MongoClient
     logger.debug('starting server')
     db = MongoClient(MONGO_DB_URI)
