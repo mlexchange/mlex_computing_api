@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from starlette.config import Config
 import uvicorn
 
-from model import MlexHost, MlexJob, MlexWorker, MlexWorkflow, UserWorkflow, Status
+from model import MlexHost, MlexJob, MlexWorker, MlexWorkflow, UserWorkflow, Status, ResourcesQuery, States
 from job_service import ComputeService, Context
 
 
@@ -86,20 +86,35 @@ def submit_host(host: MlexHost):
     return new_host_uid
 
 
-@app.get(API_URL_PREFIX + '/hosts', tags=['hosts'])
-def get_host(host_uid: str = None,
-             hostname: str = None,
+@app.get(API_URL_PREFIX + '/hosts/{host_uid}', tags=['hosts'])
+def get_host(host_uid: str,
+             hostnames: List[str] = None,
              nickname: str = None):
     '''
     This function requests the list of resources from user portal
     Args:
-        host_uid
-        hostname
-        nickname
+        host_uid:       Host UID
+        hostnames:      List of hostnames
+        nickname:       Host nickname
     Returns:
         List of resources at host
     '''
-    output = svc_context.comp_svc.get_host(host_uid=host_uid, hostname=hostname, nickname=nickname)
+    output = svc_context.comp_svc.get_host(host_uid=host_uid, hostnames=hostnames, nickname=nickname)
+    return output
+
+
+@app.get(API_URL_PREFIX + '/hosts', tags=['hosts'])
+def get_hosts(hostname: str = None,
+              nickname: str = None):
+    '''
+    This function requests the list of hosts
+    Args:
+        hostname:      Hostname
+        nickname:      Nickname
+    Returns:
+        List of resources at host
+    '''
+    output = svc_context.comp_svc.get_hosts(hostname=hostname, nickname=nickname)
     return output
 
 
@@ -147,17 +162,17 @@ def get_worker(uid: str) -> MlexWorker:
 
 @app.get(API_URL_PREFIX + '/workers', tags=['workers'])
 def get_workers(host_uid: Optional[str] = None,
-                status: Optional[Status] = None
+                state: Optional[States] = None
                 ) -> List[MlexWorker]:
     '''
     This function returns the information on the user
     Args:
         host_uid:       Host uid
-        status:         Worker status
+        state:          Worker state
     Returns:
         Worker information
     '''
-    workers = svc_context.comp_svc.get_workers(host_uid=host_uid, status=status)
+    workers = svc_context.comp_svc.get_workers(host_uid=host_uid, state=state)
     return workers
 
 
@@ -178,7 +193,7 @@ def get_job(uid: str) -> MlexJob:
 def get_jobs(user: Optional[str] = None,
              mlex_app: Optional[str] = None,
              host_uid: Optional[str] = None,
-             status: Optional[Status] = None
+             state: Optional[States] = None
              ) -> List[MlexJob]:
     """
     This function returns the list of jobs that match the query parameters
@@ -186,24 +201,24 @@ def get_jobs(user: Optional[str] = None,
         user (Optional[str], optional): find jobs based on the user. Defaults to None
         mlex_app (Optional[str], optional): find jobs based on the app that launched the workflow. Defaults to None
         host_uid (Optional[str], optional): find jobs based on the host uid. Defaults to None
-        status (Optional[Status], optional): find jobs based on the status. Defaults to None
+        state (Optional[State], optional): find jobs based on the state. Defaults to None
     Returns:
         List[MlexJob]: [Full object MlexJob that match the query parameters]
     """
-    jobs = svc_context.comp_svc.get_jobs(user=user, mlex_app=mlex_app, host_uid=host_uid, status=status)
+    jobs = svc_context.comp_svc.get_jobs(user=user, mlex_app=mlex_app, host_uid=host_uid, state=state)
     return jobs
 
 
-@app.get(API_URL_PREFIX + '/private/jobs/{uid}', tags=['private'])
-def get_next_job(uid: str) -> MlexJob:
+@app.get(API_URL_PREFIX + '/private/jobs', tags=['private'])
+def get_next_job(worker_uid: str) -> MlexJob:
     """
     This function returns the job that matches the query parameters
     Args:
-        uid:    Job UID
+        worker_uid:    Worker UID
     Returns:
         MlexJob: Full object MlexJob that matches the query parameters
     """
-    job = svc_context.comp_svc.get_next_job(uid=uid)
+    job = svc_context.comp_svc.get_next_job(worker_uid=worker_uid)
     return job
 
 

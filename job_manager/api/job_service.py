@@ -1,13 +1,16 @@
 from datetime import datetime
+from itertools import compress
 from uuid import uuid4
 import math
+import numpy as np
+from ortools.sat.python import cp_model
 import random
 from pymongo.mongo_client import MongoClient
 from pymongo import ReturnDocument
 from typing import List
 
 from model import UserWorkflow, MlexWorkflow, MlexWorker, MlexJob, MlexHost, Status, WorkerRequirements, ServiceType, \
-                  Constraints
+                  Constraints, ResourcesQuery, States
 
 
 class JobNotFound(Exception):
@@ -19,6 +22,10 @@ class WorkerNotFound(Exception):
 class WorkflowNotFound(Exception):
     pass
 
+class WorkflowNotValid(Exception):
+    pass
+
+MAX_COST = 1E10         # cost if not enough resources for cost
 
 class ComputeService:
     def __init__(self, client, db_name=None):
@@ -69,15 +76,17 @@ class ComputeService:
 
     def get_host(self,
                  host_uid: str = None,
-                 hostname: str = None,
-                 nickname: str = None
+                 hostnames: List[str] = None,
+                 nickname: str = None,
+                 resources_query: ResourcesQuery = None
                  ) -> MlexHost:
         '''
         Finds a host that matches the query parameters
         Args:
-            host_uid
-            hostname
-            nickname
+            host_uid:       Host UID
+            hostnames:      List of hostnames
+            nickname:       Host nickname
+            resources:      List of resources
         Returns:
             MLExchange host with a description of its resources
         '''
@@ -85,10 +94,27 @@ class ComputeService:
         query = {}
         if host_uid:
             subqueries.append({"uid": host_uid})
-        if hostname:
-            subqueries.append({"hostname": hostname})
+        if hostnames:
+            subqueries.append({"hostname": {"$in": hostnames}})
         if nickname:
             subqueries.append({"nickname": nickname})
+        if resources_query:
+            num_processors = resources_query.num_processors
+            num_gpus = resources_query.num_gpus
+            service_type = resources_query.service_type
+            if service_type == 'backend':
+                subqueries.append({"backend_constraints.num_processors": {"$gte": num_processors}})
+                subqueries.append({"backend_constraints.num_gpus": {"$gte": num_gpus}})
+            if service_type == 'frontend':
+                subqueries.append({"frontend_constraints.num_processors": {"$gte": num_processors}})
+                subqueries.append({"frontend_constraints.num_gpus": {"$gte": num_gpus}})
+            if service_type == 'hybrid':
+                subqueries.append({"$expr": {"$gte": [{"$sum": ["$frontend_constraints.num_processors",
+                                                                "$backend_constraints.num_processors"]},
+                                                       num_processors]}})
+                subqueries.append({"$expr": {"$gte": [{"$sum": ["$frontend_constraints.num_gpus",
+                                                                "$backend_constraints.num_gpus"]},
+                                                       num_gpus]}})
         if len(subqueries) > 0:
             query = {"$and": subqueries}
         host = self._collection_resources_list.find_one(query)
@@ -96,6 +122,33 @@ class ComputeService:
         if host:
             self._clean_id(host)
             mlex_host = MlexHost.parse_obj(host)
+        return mlex_host
+
+    def get_hosts(self,
+                 hostname: str = None,
+                 nickname: str = None
+                 ) -> List[MlexHost]:
+        '''
+        Finds a host that matches the query parameters
+        Args:
+            hostname:      Hostname
+            nickname:      Nickname
+        Returns:
+            MLExchange host with a description of its resources
+        '''
+        subqueries = []
+        query = {}
+        if hostname:
+            subqueries.append({"hostname": hostname})
+        if nickname:
+            subqueries.append({"nickname": nickname})
+        if len(subqueries) > 0:
+            query = {"$and": subqueries}
+        hosts = self._collection_resources_list.find(query)
+        mlex_host = []
+        for host in hosts:
+            self._clean_id(host)
+            mlex_host.append(MlexHost.parse_obj(host))
         return mlex_host
 
     def get_workflow(self,
@@ -177,13 +230,13 @@ class ComputeService:
 
     def get_workers(self,
                     host_uid: str = None,
-                    status: Status = None
+                    state: States = None
                     ) -> List[MlexWorker]:
         '''
         Finds workers that match the query parameters
         Args:
             host_uid:       host uid
-            status:         status
+            state:          state
         Returns:
             List of workers that match the query
         '''
@@ -191,8 +244,8 @@ class ComputeService:
         query = {}
         if host_uid:
             subqueries.append({"host_uid": host_uid})
-        if status:
-            subqueries.append({"status": status})
+        if state:
+            subqueries.append({"status.state": state})
         if len(subqueries) > 0:
             query = {"$and": subqueries}
         workers = []
@@ -251,7 +304,8 @@ class ComputeService:
                         "service_type": service_type,
                         "status.state": "queue",
                         "requirements.num_processors": {'$lte': available_processors},
-                        "requirements.num_gpus": {'$lte': available_gpus}
+                        "requirements.num_gpus": {'$lte': available_gpus},
+                        "dependencies": 0
                     },
                     {"$set": {"status.state": "running", "timestamps.execution_time": datetime.utcnow()},
                      # "$push": {"requirements.list_gpus": {"$each": list_gpus, "$slice": "$$num_gpus"}}},
@@ -265,11 +319,11 @@ class ComputeService:
                     num_gpus = worker.requirements.num_gpus
                     if service_type == 'hybrid':
                         (f_av_num_gpus, b_av_num_gpus), (f_aloc_num_gpus, b_aloc_num_gpus) = \
-                            self.update_hybrid_resources(f_num_gpus, b_num_gpus, num_gpus)
+                            self._update_hybrid_resources(f_num_gpus, b_num_gpus, num_gpus)
                         (f_av_num_processors, b_av_num_processors), (f_aloc_num_processors, b_aloc_num_processors) = \
-                            self.update_hybrid_resources(f_num_processors, b_num_processors, num_processors)
+                            self._update_hybrid_resources(f_num_processors, b_num_processors, num_processors)
                         (f_av_num_nodes, b_av_num_nodes), (f_aloc_num_nodes, b_aloc_num_nodes) = \
-                            self.update_hybrid_resources(f_num_nodes, b_num_nodes, 1)
+                            self._update_hybrid_resources(f_num_nodes, b_num_nodes, 1)
                         worker = self._collection_worker_list.find_one_and_update(
                             {"uid": worker.uid},
                             {"$set": {"requirements.list_gpus": f_gpus[0:f_aloc_num_gpus] + b_gpus[0:b_aloc_num_gpus],
@@ -342,20 +396,48 @@ class ComputeService:
         return job
 
     def get_next_job(self,
-                uid: str
+                worker_uid: str
                 ) -> MlexJob:
         '''
         Finds the job that matches the query parameters
         Args:
-            uid:   job uid
+            worker_uid:   worker UID
         Returns:
             Job that matches the query
         '''
         status = Status(**{"state": "running"})
+        worker = self.get_worker(uid=worker_uid)
+        jobs_list = worker.jobs_list
         job = None
-        item = self._collection_job_list.find_one_and_update({"uid": uid, "status.state": "queue"},
-                                                             {"$set": {"status": status.dict(),
-                                                                       "timestamps.execution_time": datetime.utcnow()}})
+        self._collection_job_list.aggregate(
+            [{"$match": {"uid": {"$in": jobs_list}, "status.state": "queue"}},
+             {"$lookup": {"from":"job_list",
+                          "let": {"dep": "$dependencies"},
+                          "pipeline": [{"$match": {"$expr": {"$in": ["$uid", "$$dep"]}}},
+                                       {"$group": {"_id": 0, "state":{"$push":"$status.state"}}}],
+                          "as": "dependencies_status"}},
+             {"$set": {"dependencies_status": {"$cond": {"if": {"$eq": ["$dependencies_status", []]},
+                                                             "then": [["no_dependencies"]],
+                                                             "else": "$dependencies_status.state"}}
+                           }},
+             {"$unwind": "$dependencies_status"},
+             {"$set": {"status.state": {"$cond": {"if": {"$in": ["queue", "$dependencies_status"]},
+                                                  "then": "$status.state",
+                                                  "else": {
+                                                      "$cond": {"if": {"$in": ["running", "$dependencies_status"]},
+                                                                "then": "$status.state",
+                                                                "else": "running"}
+                                                  }}
+                                        }}},
+             {"$project": {"dependencies_status": 0}},
+             {"$merge": {"into": "job_list",
+                         "whenMatched": "replace",
+                         "whenNotMatched": "discard"}}
+             ])
+        item = self._collection_job_list.find_one_and_update({"uid": {"$in": jobs_list},
+                                                              "status.state": "running",
+                                                              "timestamps.execution_time": {"$type":"null"}},
+                                                             {"$set": {"timestamps.execution_time": datetime.utcnow()}})
         if item:
             self._clean_id(item)
             job = MlexJob.parse_obj(item)
@@ -365,7 +447,7 @@ class ComputeService:
                  user: str = None,
                  mlex_app: str = None,
                  host_uid: str = None,
-                 status: Status = None,
+                 state: States = None,
                  ) -> List[MlexJob]:
         '''
         Finds jobs that match the query parameters
@@ -373,7 +455,7 @@ class ComputeService:
             user:       username
             mlex_app:   MLExchange app associated with job
             host_uid:   host uid
-            status:     job status
+            state:      job state
         Returns:
             List of jobs that match the query
         '''
@@ -400,8 +482,8 @@ class ComputeService:
                                    "as": "workers"}},
                       {"$unwind": "$workers"},
                       {"$match": {"workers.host_uid": host_uid}}]
-        if status:
-            query.append({"$match": {"status": status}})
+        if state:
+            query.append({"$match": {"status.state": state}})
         jobs = []
         for item in self._collection_job_list.aggregate(query):
             self._clean_id(item)
@@ -589,6 +671,7 @@ class ComputeService:
                     self._collection_job_list.update_one(
                         {'uid': job_uid},
                         {'$set': {'status': status.dict(), "timestamps.end_time": datetime.utcnow()}})
+                    self._update_dependencies(job_uid)
                 else:
                     self._collection_job_list.update_one(
                         {'uid': job_uid},
@@ -636,10 +719,12 @@ class ComputeService:
             {'uid': job_uid, 'status.state': {'$nin': ['complete', 'failed']}},
             {'$set': {'terminate': True}}
         )
-        self._collection_job_list.update_one(               # if the job is in queue, mark as canceled
+        results = self._collection_job_list.update_one(               # if the job is in queue, mark as canceled
             {'uid': job_uid, 'status.state': 'queue'},
             {'$set': {'terminate': True, 'status.state': 'canceled'}}
         )
+        if results.modified_count>0:        # if the job is cancelled, update dependencies
+            self._update_dependencies(job_uid)
         pass
 
     def split_workers(self, user_workflow: UserWorkflow):
@@ -652,50 +737,71 @@ class ComputeService:
             mlex_workers:   List[MlexWorker]
             mlex_jobs:      List[MLexJob]
         '''
+        host_list = user_workflow.host_list
         requirements = user_workflow.requirements
         job_list = user_workflow.job_list
         constraints = requirements.constraints
+        cost_matrix = []
         if constraints:
             num_nodes = 0
             list_num_processors = []
             list_num_gpus = []
+            costs = []
             for constraint in constraints:
                 num_nodes += constraint.num_nodes
                 list_num_processors.extend([constraint.num_processors] * num_nodes)
                 list_num_gpus.extend([constraint.num_gpus] * num_nodes)
+                costs.extend(self._calculate_cost(job_list, constraint.num_processors, constraint.num_gpus) *
+                             constraint.num_nodes)
         else:
             num_nodes = requirements.num_nodes
             num_processors = requirements.num_processors
             num_gpus = requirements.num_gpus
             host_uid = requirements.host_uid
+            costs = (self._calculate_cost(job_list, num_processors, num_gpus) * num_nodes)
+        cost_matrix = np.array(costs)
+        cost_matrix = cost_matrix.reshape(num_nodes, len(job_list))
+        print(f'Cost matrix: {cost_matrix}')
+        if MAX_COST*num_nodes in sum(cost_matrix):
+            raise WorkflowNotValid(f"the list of jobs cannot be completed with the arranged resources")
+        allocation_matrix = self._assign_jobs(cost_matrix)
         mlex_jobs_dict = []
         jobs_uid = []
         services_type = []
-        for job in user_workflow.job_list:
+        worker_dependencies = [0]*len(job_list)
+        for ind, job in enumerate(job_list):
             job.uid = str(uuid4())
             jobs_uid.append(job.uid)                    # job uid
+            job.dependencies = list(map(jobs_uid.__getitem__, user_workflow.dependencies[str(ind)]))
+            worker_dependencies[ind] = len(job.dependencies)
             services_type.append(job.service_type)      # frontend vs backend
             mlex_jobs_dict.append(job.dict())
-        num_jobs_per_node = math.ceil(len(job_list) / num_nodes)
         mlex_workers_dict = []
         worker_uid_list = []
         for node in range(num_nodes):
             if constraints:
                 num_processors = list_num_processors[node]
                 num_gpus = list_num_gpus[node]
-            host = self.get_host()
-            host_uid = MlexHost.parse_obj(host).uid     # assigning first host for now! **warning**
-            # host_uid = reserve_comp_resources(host_uid=host_uid, num_processors=num_processors, num_gpus=num_gpus)  # reserves comp resources
-            jobs_in_node = jobs_uid[node * num_jobs_per_node:(node + 1) * num_jobs_per_node]
-            services_in_node = services_type[node * num_jobs_per_node:(node + 1) * num_jobs_per_node]
+                requirements = {'num_processors':num_processors, "num_gpus": num_gpus}
+            jobs_in_node = list(compress(jobs_uid, allocation_matrix[node,]))
+            dependencies = list(compress(worker_dependencies, allocation_matrix[node,]))
+            services_in_node = list(compress(services_type, allocation_matrix[node,]))
             if len(set(services_in_node))==1:
                 service_type = services_in_node[0]      # if all are frontend or backend
             else:
                 service_type = 'hybrid'
+            resources_query = ResourcesQuery(num_processors=num_processors,
+                                             num_gpus=num_gpus,
+                                             service_type=service_type)
+            host = self.get_host(hostnames=host_list, resources_query=resources_query)
+            if not host:
+                raise WorkflowNotValid(f"not enough resources to execute workflow")
+            host_uid = MlexHost.parse_obj(host).uid
             worker = MlexWorker(uid=str(uuid4()),
                                 service_type=service_type,
                                 host_uid=host_uid,
                                 jobs_list=jobs_in_node,
+                                dependencies=dependencies,
                                 requirements=WorkerRequirements.parse_obj(requirements))
             worker_uid_list.append(worker.uid)
             worker_dict = worker.dict()
@@ -707,6 +813,40 @@ class ComputeService:
         user_workflow.workers_list = worker_uid_list
         user_workflow.service_type = workflow_service_type
         return user_workflow.dict(), mlex_workers_dict, mlex_jobs_dict
+
+    def _update_dependencies(self, job_uid):
+        '''
+        Updates the job dependencies accross workers
+        Args:
+            job_uid:    Job unique identifier
+        Returns:
+            None
+        '''
+        # update dependencies
+        dependent_jobs = self._collection_job_list.find({'dependencies': job_uid})
+        dependent_jobs = [dependent_job['uid'] for dependent_job in dependent_jobs]
+        # update workers dependencies
+        workers = self._collection_worker_list.find({'jobs_list': {'$in': dependent_jobs}})
+        for worker in workers:
+            worker = MlexWorker.parse_obj(worker)
+            worker_jobs = worker.jobs_list
+            for indx, worker_job in enumerate(worker_jobs):
+                if worker_job in dependent_jobs:
+                    self._collection_worker_list.update_one(
+                        {"uid": worker.uid},
+                        {"$inc": {f"dependencies.{indx}": -1}},
+                    )
+        # self._collection_worker_list.update_many(
+        #     {'jobs_list': {'$in': dependent_jobs}},
+        #     {'$inc': {"dependencies.$[ind]": -1}},
+        #     {"arrayFilters": [{"jobs_list.$[ind]": {'$in': dependent_jobs} }]}
+        # )
+        #                              {"$cond": {"if": {"$in": ["dependencies.$", dependent_jobs]},
+        #                         "then": -1,
+        #                         "else": 0}}}
+        #      }
+        # )
+        # #                     {"dependencies.$": -1}}
 
     def _create_indexes(self):
         self._collection_workflow_list.create_index([('uid', 1)], unique=True)
@@ -733,7 +873,84 @@ class ComputeService:
             del data['_id']
 
     @staticmethod
-    def update_hybrid_resources(front, back, job):
+    def _calculate_cost(job_list, num_processors, num_gpus):
+        '''
+        Calculates the costs of the list of jobs for a given worker with the input constraints
+        Args:
+            job_list:           List of jobs
+            num_processors:     Number of CPUs
+            num_gpus:           Number of GPUs
+        '''
+        penalty = 10            # penalty for GPUs
+        costs = []
+        for job in job_list:
+            cost = 0
+            if job.requirements:
+                job_num_processors = job.requirements.num_processors
+                job_num_gpus = job.requirements.num_gpus
+                if not job_num_processors:
+                    job_num_processors = num_processors
+                if not job_num_gpus:
+                    job_num_gpus = num_gpus
+                if num_processors>=job_num_processors and num_gpus>=job_num_gpus:
+                    cost = num_processors - job_num_processors + penalty*(num_gpus - job_num_gpus)
+                else:
+                    cost = MAX_COST
+            costs.append(cost)
+        return costs
+
+    @staticmethod
+    def _assign_jobs(cost_matrix):
+        '''
+        Creates an allocation matrix for jobs and workers
+        Args:
+            cost_matrix:    Cost matrix
+        '''
+        num_workers, num_tasks = cost_matrix.shape
+        demands = np.ones((num_tasks)).astype(int)
+        supply = np.ones((num_workers)).astype(int)*num_tasks
+        model = cp_model.CpModel()
+        x = {}
+        for worker in range(num_workers):
+            for task in range(num_tasks):
+                x[worker, task] = model.NewBoolVar(f'x[{worker}, {task}]')
+
+        for worker in range(num_workers):
+            model.Add(sum(x[worker, task] for task in range(num_tasks)) <= supply[worker])
+
+        for worker in range(num_workers):
+            model.Add(sum(x[worker, task] for task in range(num_tasks)) >= 1)
+
+        for task in range(num_tasks):
+            model.Add(sum(x[worker, task] for worker in range(num_workers)) == demands[task])
+
+        objective_terms = []
+        for worker in range(num_workers):
+            for task in range(num_tasks):
+                objective_terms.append(cost_matrix[worker][task] * x[worker, task])
+
+        model.Minimize(sum(objective_terms))
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+
+        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+            print(f'Total cost = {solver.ObjectiveValue()}\n')
+
+        val = []
+        for worker in range(num_workers):
+            for task in range(num_tasks):
+                try:
+                    val.append(solver.Value(x[worker, task]))
+                except:
+                    print("error could not find value")
+        
+        sol = np.array(val)
+        sol = sol.reshape(num_workers, num_tasks)
+        print(f'Job assignment: {sol}')
+        return sol
+
+    @staticmethod
+    def _update_hybrid_resources(front, back, job):
         '''
         Distributes the job resources to both frontend and backend sources
         Args:

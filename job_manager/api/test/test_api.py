@@ -66,9 +66,15 @@ def test_get_next_workers(rest_client: TestClient):
     init_frontend_available = mlex_host.frontend_available
     init_backend_available = mlex_host.backend_available
 
-    # get next worker
+    # get next backend worker
+    # this worker cannot be executed due to it's dependencies
     response = rest_client.get(f'{COMP_URL}private/workers', params={'host_uid': mlex_host.uid,
                                                                      'service_type': 'backend'}).json()
+    assert response is None
+
+    # get next hybrid worker
+    response = rest_client.get(f'{COMP_URL}private/workers', params={'host_uid': mlex_host.uid,
+                                                                     'service_type': 'hybrid'}).json()
     worker = MlexWorker.parse_obj(response)
     num_processors = worker.requirements.num_processors
     num_gpus = worker.requirements.num_gpus
@@ -108,12 +114,31 @@ def test_get_next_workers(rest_client: TestClient):
     assert worker.host_uid == mlex_host.uid and worker.status.state == 'running'
 
 
+def test_dependencies_status(rest_client: TestClient):
+    # get list of dependencies in queued worker
+    status = Status(**{'state': 'queue'})
+    workers = rest_client.get(f'{COMP_URL}workers', json=status.dict()).json()
+    q_worker = workers[0]
+    init_dependencies = q_worker['dependencies']
+    # get list of jobs in running worker and termine it's job
+    status = Status(**{'state': 'running'})
+    workers = rest_client.get(f'{COMP_URL}workers', json=status.dict()).json()
+    r_worker = workers[0]
+    jobs = r_worker['jobs_list']
+    response = rest_client.patch(f'{COMP_URL}jobs/{jobs[0]}/terminate')
+    assert response.status_code == 200
+    # check the other worker dependencies
+    worker = rest_client.get(f'{COMP_URL}workers/{q_worker["uid"]}').json()
+    final_dependencies = worker['dependencies']
+    assert final_dependencies[0] == init_dependencies[0] - 1
+
+
 def test_update_status(rest_client: TestClient):
     # get next worker
     host = rest_client.get(f'{COMP_URL}hosts').json()
     mlex_host = MlexHost.parse_obj(host)
     response = rest_client.get(f'{COMP_URL}private/workers', params={'host_uid': mlex_host.uid,
-                                                                     'service_type': 'hybrid'}).json()
+                                                                     'service_type': 'backend'}).json()
     worker = MlexWorker.parse_obj(response)
     # change the status of the jobs in this worker
     for job_uid in worker.jobs_list:
@@ -209,6 +234,8 @@ job1 = {
     'mlex_app': 'seg-demo',
     'job_kwargs': {'uri': 'image', 'cmd': 'python3'},
     'working_directory': 'home',
+    'requirements': {'num_processors': 2,
+                     'num_gpus': 0}
 }
 
 job2 = {
@@ -216,6 +243,8 @@ job2 = {
     'mlex_app': 'mlcoach',
     'job_kwargs': {'uri': 'image', 'cmd': 'python3'},
     'working_directory': 'home',
+    'requirements': {'num_processors': 2,
+                     'num_gpus': 1}
 }
 
 job3 = {
@@ -223,6 +252,7 @@ job3 = {
     'mlex_app': 'clinic',
     'job_kwargs': {'uri': 'image', 'cmd': 'python3'},
     'working_directory': 'home',
+    'requirements': {'num_processors': 2}
 }
 
 job4 = {
@@ -236,6 +266,11 @@ workflow1 = {
     'user_uid': '111',
     'workflow_type': 'serial',
     'job_list': [job1, job2, job3, job4],
+    'host_list':['vaughan.als.lbl.gov'],
+    'dependencies': {'0': [],
+                     '1': [0],
+                     '2': [0],
+                     '3': [0,2]},
     'requirements': {'num_processors': 2,
                      'num_gpus': 1,
                      'num_nodes': 2}
@@ -246,7 +281,7 @@ host1 = {
     'hostname': 'vaughan.als.lbl.gov',
     'frontend_constraints': {'num_processors': 10,
                              'num_gpus': 2,
-                             'list_gpus': [0,3],
+                             'list_gpus': [0, 3],
                              'num_nodes': 5},
     'backend_constraints': {'num_processors': 5,
                              'num_gpus': 2,

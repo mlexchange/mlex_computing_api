@@ -24,8 +24,8 @@ def get_worker(worker_uid):
     Returns:
         worker:        [MlexWorker]
     '''
-    response = urllib.request.urlopen(f'{COMP_API_URL}workers/{worker_uid}')
-    worker = json.loads(response.read())
+    response = requests.get(f'{COMP_API_URL}workers/{worker_uid}')
+    worker = response.json()
     return MlexWorker.parse_obj(worker)
 
 
@@ -37,22 +37,22 @@ def get_job(job_uid):
     Returns:
         job:        [MlexJob]
     '''
-    response = urllib.request.urlopen(f'{COMP_API_URL}jobs/{job_uid}')
-    job = json.loads(response.read())
+    response = requests.get(f'{COMP_API_URL}jobs/{job_uid}')
+    job = response.json()
     job = MlexJob.parse_obj(job)
     return job
 
 
-def get_next_job(job_uid):
+def get_next_job(worker_uid):
     '''
     Gets the next job in worker
     Args:
-        job_uid:    Job UID
+        worker_uid:    Worker UID
     Returns:
-        job:        [MlexJob]
+        job:           [MlexJob]
     '''
-    response = urllib.request.urlopen(f'{COMP_API_URL}private/jobs/{job_uid}')
-    job = json.loads(response.read())
+    response = requests.get(f'{COMP_API_URL}private/jobs', params={'worker_uid': worker_uid})
+    job = response.json()
     if job:
         job = MlexJob.parse_obj(job)
         logging.info(f'Executing job: {job.uid}')
@@ -122,12 +122,15 @@ if __name__ == '__main__':
 
     # get worker information
     worker = MlexWorker(**json.loads(args.worker))
+    jobs_list = worker.jobs_list
     num_processors = worker.requirements.num_processors
     list_gpus = worker.requirements.list_gpus
 
-    for job_uid in worker.jobs_list:
-        new_job = get_next_job(job_uid)
+    while len(jobs_list)>0:
+        new_job = get_next_job(worker.uid)
         if new_job:
+            job_uid = new_job.uid
+            jobs_list.remove(new_job.uid)
             try:        # launch job
                 logs = ''
                 docker_job = new_job.job_kwargs

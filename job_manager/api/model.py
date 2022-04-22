@@ -1,7 +1,7 @@
 from enum import Enum
 from datetime import datetime
 
-from pydantic import BaseModel, Extra, Field
+from pydantic import BaseModel, Extra, Field, validator
 from typing import Optional, List, Union
 
 
@@ -15,11 +15,6 @@ class States(str, Enum):
     failed = "failed"
     canceled = "canceled"
     terminated = "terminated"
-
-
-class WorkflowType(str, Enum):
-    serial = "serial"
-    parallel = "parallel"
 
 
 class ServiceType(str, Enum):
@@ -69,6 +64,9 @@ class CompRequirements(WorkerRequirements):
     host_uid: Optional[str]
     constraints: Optional[List[Constraints]]
 
+class ResourcesQuery(Resources):
+    service_type: ServiceType
+
 
 ####################################################### CLASSES #######################################################
 DEFAULT_TIMESTAMP = TimeStamps(submission_time=datetime.utcnow())
@@ -110,7 +108,9 @@ class MlexJob(BasicAsset):
     working_directory: str = Field(description="dataset uri")
     status: Status = DEFAULT_STATUS
     pid: str = DEFAULT_JOB_PID
+    requirements: Optional[Resources]
     logs: Optional[str]
+    dependencies: List[str] = DEFAULT_UID_LIST
     class Config:
         extra = Extra.ignore
 
@@ -121,6 +121,7 @@ class MlexWorker(BasicAsset):
     status: Status = DEFAULT_STATUS
     jobs_list: List[str] = DEFAULT_UID_LIST
     requirements: Optional[WorkerRequirements] = Field(description='computational requirements')
+    dependencies: List[int] = []
     class Config:
         extra = Extra.ignore
 
@@ -128,7 +129,6 @@ class MlexWorker(BasicAsset):
 class MlexWorkflow(BasicAsset):
     service_type: ServiceType = DEFAULT_SERVICE
     user_uid: str = Field(description='user identifier')
-    workflow_type: WorkflowType = Field(description='sequential vs parallel')
     workers_list: List[str] = DEFAULT_UID_LIST
     status: Status = DEFAULT_STATUS
     class Config:
@@ -137,4 +137,6 @@ class MlexWorkflow(BasicAsset):
 
 class UserWorkflow(MlexWorkflow):
     job_list: List[MlexJob]
+    dependencies: dict
+    host_list: List[str] = Field(description='list of hostnames')
     requirements: Optional[CompRequirements] = Field(description='computational requirements')

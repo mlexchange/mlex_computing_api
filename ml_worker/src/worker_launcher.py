@@ -35,7 +35,7 @@ def get_host(host):
             host_uid = response.json()
             logging.info(f'Created host with uid: {host_uid}')
     else:
-        mlex_host = MlexHost.parse_obj(mlex_host)
+        mlex_host = MlexHost.parse_obj(mlex_host[0])
         host_uid = mlex_host.uid
         logging.info(f'Found host with uid: {host_uid}')
     return host_uid
@@ -109,5 +109,3 @@ if __name__ == '__main__':
                 logging.error(f'Worker {new_worker.uid} failed: {err}')
                 status = Status(state="failed", return_code=err)
                 update_worker_status(new_worker.uid, status)
-        else:
-            time.sleep(5)           # Idle for 5 seconds if no worker is found
