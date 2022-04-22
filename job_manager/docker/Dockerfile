@@ -10,14 +10,16 @@ RUN apt-get update && apt-get install -y \
     python3-pip\
     ffmpeg\
     libsm6\
-    libxext6 
+    libxext6 \
+    git
 
 RUN pip3 install --upgrade pip &&\
     pip3 install -r requirements.txt 
 
 WORKDIR /app/work
 ENV HOME /app/work
-COPY src src
+COPY api api
+COPY pytest.ini pytest.ini
 ENV PYTHONUNBUFFERED=1
 
 CMD ["bash"]
