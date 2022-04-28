@@ -14,6 +14,7 @@ NUM_PROCESSORS=2
 HOST={"nickname":"local","hostname":"local.als.lbl.gov","frontend_constraints":{"num_processors":10,"num_gpus":0,"list_gpus":[],"num_nodes":2},"backend_constraints":{"num_processors":5,"num_gpus":0,"list_gpus":[],"num_nodes":2}}
 ```
 
+
 HOST description:
 * nickname: Name of host
 * hostname: Hostname
@@ -28,7 +29,7 @@ HOST description:
     * list_gpus: List of GPUs for backend services, such as [2,3,...]
     * num_nodes: Maximum number of nodes/workers that can be launched at the same time for backend services
 
-Make sure to setup these elements according to the resources of your local host.
+Make sure to set up these elements according to the resources of your local host.
 
 Once the environmetal file is ready, use the command `docker-compose up --build`. 
  
