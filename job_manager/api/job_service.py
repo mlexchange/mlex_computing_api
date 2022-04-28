@@ -507,8 +507,8 @@ class ComputeService:
             self._collection_resources_list.update_one(
                 {"uid": host_uid},
                 {"$addToSet": {"frontend_available.list_gpus": {"$each": list_gpus}},
-                 "$inc": {"frontend_available.num_available_processors": num_processors,
-                          "frontend_available.num_available_gpus": num_gpus,
+                 "$inc": {"frontend_available.num_processors": num_processors,
+                          "frontend_available.num_gpus": num_gpus,
                           "frontend_available.num_nodes": 1}
                  })
         if service_type == 'backend':
