@@ -14,7 +14,23 @@ NUM_PROCESSORS=2
 HOST={"nickname":"local","hostname":"local.als.lbl.gov","frontend_constraints":{"num_processors":10,"num_gpus":0,"list_gpus":[],"num_nodes":2},"backend_constraints":{"num_processors":5,"num_gpus":0,"list_gpus":[],"num_nodes":2}}
 ```
 
-Then, use the command `docker-compose up --build`. 
+HOST description:
+* nickname: Name of host
+* hostname: Hostname
+* frontend_constraints: Maximum number of resources for frontend services
+    * num_processors: Maximum number of processors/cores for frontend services
+    * num_gpus: Maximum number of GPUs for frontend services
+    * list_gpus: List of GPUs for frontend services, such as [0,1,...]
+    * num_nodes: Maximum number of nodes/workers that can be launched at the same time for frontend services
+* backend_constraints: Maximum number of resources for backend services
+    * num_processors: Maximum number of processors/cores for backend services
+    * num_gpus: Maximum number of GPUs for backend services
+    * list_gpus: List of GPUs for backend services, such as [2,3,...]
+    * num_nodes: Maximum number of nodes/workers that can be launched at the same time for backend services
+
+Make sure to setup these elements according to the resources of your local host.
+
+Once the environmetal file is ready, use the command `docker-compose up --build`. 
  
 **If you are using Apple M1 machine**, instead use the command `docker-compose -f docker-compose-arm64.yml up --build`
 
