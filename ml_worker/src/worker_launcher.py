@@ -109,3 +109,4 @@ if __name__ == '__main__':
                 logging.error(f'Worker {new_worker.uid} failed: {err}')
                 status = Status(state="failed", return_code=err)
                 update_worker_status(new_worker.uid, status)
+            new_worker = None
