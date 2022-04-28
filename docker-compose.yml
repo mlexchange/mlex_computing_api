@@ -34,6 +34,7 @@ services:
       context: 'ml_worker'
       dockerfile: 'docker/Dockerfile'
     command: sh -c '
+      make build_docker &&
       sleep 20 &&
       python3 src/worker_launcher.py'
     volumes:

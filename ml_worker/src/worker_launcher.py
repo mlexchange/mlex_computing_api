@@ -107,6 +107,6 @@ if __name__ == '__main__':
                                                          detach     = True)
             except Exception as err:
                 logging.error(f'Worker {new_worker.uid} failed: {err}')
-                status = Status(state="failed", return_code=err)
+                status = Status(state="failed", return_code=str(err))
                 update_worker_status(new_worker.uid, status)
             new_worker = None
