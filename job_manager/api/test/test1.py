@@ -63,7 +63,7 @@ def test_get_next_workers():
         None
     '''
     # get initial values for comparison
-    host = requests.get(f'{COMP_URL}hosts', params={'nickname': 'vaughan'}).json()
+    host = requests.get(f'{COMP_URL}hosts', params={'nickname': 'test'}).json()
     mlex_host = MlexHost.parse_obj(host[0])
     init_frontend_available = mlex_host.frontend_available
     init_backend_available = mlex_host.backend_available
@@ -83,7 +83,7 @@ def test_get_next_workers():
     assigned_gpus = worker.requirements.list_gpus
 
     # get final values for comparison
-    host = requests.get(f'{COMP_URL}hosts', params={'nickname': 'vaughan'}).json()
+    host = requests.get(f'{COMP_URL}hosts', params={'nickname': 'test'}).json()
     mlex_host = MlexHost.parse_obj(host[0])
     final_frontend_available = mlex_host.frontend_available
     final_backend_available = mlex_host.backend_available
@@ -141,7 +141,7 @@ def test_dependencies_status():
 
 def test_update_status():
     # get next worker
-    host = requests.get(f'{COMP_URL}hosts', params={'nickname': 'vaughan'}).json()
+    host = requests.get(f'{COMP_URL}hosts', params={'nickname': 'test'}).json()
     mlex_host = MlexHost.parse_obj(host[0])
     response = requests.get(f'{COMP_URL}private/workers', params={'host_uid': mlex_host.uid,
                                                                      'service_type': 'backend'}).json()
@@ -271,9 +271,9 @@ job4 = {
 
 workflow1 = {
     'user_uid': '111',
-    'workflow_type': 'serial',
+    'description': 'this is a description',
     'job_list': [job1, job2, job3, job4],
-    'host_list':['vaughan.als.lbl.gov'],
+    'host_list':['test.als.lbl.gov'],
     'dependencies': {'0': [],
                      '1': [0],
                      '2': [0],
