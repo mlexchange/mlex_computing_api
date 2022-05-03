@@ -128,6 +128,7 @@ class MlexWorker(BasicAsset):
 
 class MlexWorkflow(BasicAsset):
     service_type: ServiceType = DEFAULT_SERVICE
+    description: str = Field(description='workflow description')
     user_uid: str = Field(description='user identifier')
     workers_list: List[str] = DEFAULT_UID_LIST
     status: Status = DEFAULT_STATUS

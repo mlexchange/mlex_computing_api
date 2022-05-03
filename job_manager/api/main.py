@@ -133,17 +133,19 @@ def get_workflow(uid: str) -> MlexWorkflow:
 
 @app.get(API_URL_PREFIX + '/workflows', tags=['workflows'])
 def get_workflows(user: Optional[str] = None,
-                  host_uid: Optional[str] = None
+                  host_uid: Optional[str] = None,
+                  state: Optional[States] = None
                   ) -> List[MlexWorkflow]:
     """
     This function returns the list of jobs that match the query parameters
     Args:
         user (Optional[str], optional): find workflows based on the user. Defaults to None
         host_uid (Optional[str], optional): find workflows based on the host uid. Defaults to None
+        state (Optional[State], optional): find jobs based on the state. Defaults to None
     Returns:
         List[MlexWorkflow]: [Full object MlexWorkflow that match the query parameters]
     """
-    workflows = svc_context.comp_svc.get_workflows(user=user, host_uid=host_uid)
+    workflows = svc_context.comp_svc.get_workflows(user=user, host_uid=host_uid, state=state)
     return workflows
 
 

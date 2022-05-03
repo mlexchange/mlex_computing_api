@@ -177,7 +177,8 @@ class ComputeService:
 
     def get_workflows(self,
                       user: str = None,
-                      host_uid: str = None
+                      host_uid: str = None,
+                      state: States = None,
                       ) -> List[MlexWorkflow]:
         '''
         Finds list of workflows that match the query parameters
@@ -196,6 +197,8 @@ class ComputeService:
                                    "pipeline": [{"$match": {"$expr": {"$in": ["$uid", "$$workers_list"]}}}],
                                    "as": "workers"}},
                       {"$match": {"workers.host_uid": host_uid}}]
+        if state:
+            query.append({"$match": {"status.state": state}})
         # if worker_uid:
         #     query.append({"$match": {"workers_list": worker_uid}})
         workflows = []
