@@ -39,7 +39,7 @@ class DockerJob(BaseModel):
     uri: str = Field(description="container uri")
     type: str = 'docker'
     cmd: str = Field(description="command to run")
-    port: Optional[List[int]] = Field(description="port to expose")
+    map: Optional[dict] = Field(description="{'port1/tcp': '', 'port2/tcp': '', ... }")
     kwargs: Optional[dict] = Field(description="container kwargs")
 
 
@@ -97,6 +97,7 @@ class BasicAsset(BaseModel):
     uid: str = DEFAULT_UID
     schema_version: str = SCHEMA_VERSION
     timestamps: TimeStamps = DEFAULT_TIMESTAMP
+    description: Optional[str] = Field(description='description')
     error: Optional[str] = Field(description="error description")
     terminate: Optional[bool] = Field(description="terminate")
 

@@ -131,6 +131,19 @@ def get_workflow(uid: str) -> MlexWorkflow:
     return workflow
 
 
+@app.get(API_URL_PREFIX + '/workflows/{uid}/mapping', tags=['workflows'])
+def get_workflow(uid: str) -> dict:
+    """
+    This function returns the workflow that matches the query parameters
+    Args:
+        uid:            workflow uid
+    Returns:
+        MlexWorkflow: Full object MlexWorkflow that matches the query parameters
+    """
+    workflow = svc_context.comp_svc.get_workflow_mapping(uid=uid)
+    return workflow
+
+
 @app.get(API_URL_PREFIX + '/workflows', tags=['workflows'])
 def get_workflows(user: Optional[str] = None,
                   host_uid: Optional[str] = None,
@@ -284,7 +297,7 @@ def terminate_worker(uid: str):
 @app.patch(API_URL_PREFIX + '/private/jobs/{uid}/update', tags=['private'], response_model=ResponseModel)
 def update_job(uid: str,
                status: Optional[Status] = None,
-               logs: Optional[str] = None
+               logs: Optional[str] = None,
                ):
     '''
     This function updates the job status
@@ -296,6 +309,21 @@ def update_job(uid: str,
         job_uid
     '''
     svc_context.comp_svc.update_job(uid, status, logs)
+    return ResponseModel(uid=uid)
+
+
+@app.patch(API_URL_PREFIX + '/private/jobs/{uid}/update/mapping', tags=['private'], response_model=ResponseModel)
+def update_job_mapping(uid: str,
+                       ports: Optional[dict] = None,
+                       ):
+    '''
+    This function updates the job status
+    Args:
+        ports:      Dictionary of ports
+    Returns:
+        job_uid
+    '''
+    svc_context.comp_svc.update_job_mapping(uid, ports)
     return ResponseModel(uid=uid)
 
 

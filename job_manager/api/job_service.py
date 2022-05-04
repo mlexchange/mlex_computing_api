@@ -175,6 +175,25 @@ class ComputeService:
         workflow = MlexWorkflow.parse_obj(item)
         return workflow
 
+    def get_workflow_mapping(self,
+                             uid: str = None,
+                             ) -> dict:
+        '''
+        Finds the workflow mapping information that matches the query parameters
+        Args:
+            uid:   workflow uid
+        Returns:
+            Port mapping information
+        '''
+        workflow = self.get_workflow(uid)
+        ports = {}
+        for worker_uid in workflow.workers_list:
+            worker = self.get_worker(worker_uid)
+            for job_uid in worker.jobs_list:
+                job = self.get_job(job_uid)
+                ports[job.uid] = job.job_kwargs.map
+        return ports
+
     def get_workflows(self,
                       user: str = None,
                       host_uid: str = None,
@@ -379,6 +398,7 @@ class ComputeService:
                                     "backend_available.list_gpus": list_gpus,
                                     "backend_available.num_nodes": available_workers}})
                     self._clean_id(worker)
+                    self.update_workflow(None, Status(state='running'), worker['uid'])
         return worker
 
     def get_job(self,
@@ -541,7 +561,7 @@ class ComputeService:
                  })
         pass
 
-    def update_workflow(self, workflow_uid: str, status: Status):
+    def update_workflow(self, workflow_uid: str, status: Status, worker_uid: str = None):
         '''
         Update the status of a given workflow
         Args:
@@ -550,7 +570,11 @@ class ComputeService:
         Returns:
             workflow uid
         '''
-        workflow = self.get_workflow(uid=workflow_uid)
+        if worker_uid:
+            workflow = self.get_workflow(worker_uid=worker_uid)
+            workflow_uid = workflow.uid
+        else:
+            workflow = self.get_workflow(uid=workflow_uid)
         if workflow.status != status:                     # update if status has changed
             if status.state == 'running':
                 self._collection_workflow_list.update_one(
@@ -699,11 +723,26 @@ class ComputeService:
                     status.state = 'running'
                 if worker.status.state != status.state:                       # update if state has changed
                     self.update_worker(worker_uid=worker.uid, status=status)
-        elif logs:
+        if logs:
             self._collection_job_list.update_one(
                 {'uid': job_uid},
                 {'$set': {'logs': logs}}
             )
+        pass
+    
+    def update_job_mapping(self, job_uid: str, ports: dict):
+        '''
+        Update the status of a given job and the worker associated with this job
+        Args:
+            job_uid:    job unique identifier
+            ports:      job ports
+        Returns:
+            None
+        '''
+        self._collection_job_list.update_one(
+            {'uid': job_uid},
+            {'$set': {'job_kwargs.map': ports}}
+        )
         pass
 
     def terminate_job(self, job_uid: str):
