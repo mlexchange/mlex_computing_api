@@ -470,6 +470,7 @@ class ComputeService:
                  user: str = None,
                  mlex_app: str = None,
                  host_uid: str = None,
+                 service_type: ServiceType = None,
                  state: States = None,
                  ) -> List[MlexJob]:
         '''
@@ -478,6 +479,7 @@ class ComputeService:
             user:       username
             mlex_app:   MLExchange app associated with job
             host_uid:   host uid
+            service_type: service type
             state:      job state
         Returns:
             List of jobs that match the query
@@ -505,6 +507,8 @@ class ComputeService:
                                    "as": "workers"}},
                       {"$unwind": "$workers"},
                       {"$match": {"workers.host_uid": host_uid}}]
+        if service_type:
+            query.append({"$match": {"service_type": service_type}})
         if state:
             query.append({"$match": {"status.state": state}})
         jobs = []
@@ -741,7 +745,7 @@ class ComputeService:
         '''
         self._collection_job_list.update_one(
             {'uid': job_uid},
-            {'$set': {'job_kwargs.map': ports}}
+            {'$set': {'job_kwargs.map': ports['ports']}}
         )
         pass
 

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from starlette.config import Config
 import uvicorn
 
-from model import MlexHost, MlexJob, MlexWorker, MlexWorkflow, UserWorkflow, Status, ResourcesQuery, States
+from model import MlexHost, MlexJob, MlexWorker, MlexWorkflow, UserWorkflow, Status, ResourcesQuery, States, ServiceType
 from job_service import ComputeService, Context
 
 
@@ -132,7 +132,7 @@ def get_workflow(uid: str) -> MlexWorkflow:
 
 
 @app.get(API_URL_PREFIX + '/workflows/{uid}/mapping', tags=['workflows'])
-def get_workflow(uid: str) -> dict:
+def get_workflow_mapping(uid: str) -> dict:
     """
     This function returns the workflow that matches the query parameters
     Args:
@@ -208,6 +208,7 @@ def get_job(uid: str) -> MlexJob:
 def get_jobs(user: Optional[str] = None,
              mlex_app: Optional[str] = None,
              host_uid: Optional[str] = None,
+             service_type: Optional[ServiceType] = None,
              state: Optional[States] = None
              ) -> List[MlexJob]:
     """
@@ -216,11 +217,13 @@ def get_jobs(user: Optional[str] = None,
         user (Optional[str], optional): find jobs based on the user. Defaults to None
         mlex_app (Optional[str], optional): find jobs based on the app that launched the workflow. Defaults to None
         host_uid (Optional[str], optional): find jobs based on the host uid. Defaults to None
+        service_type (Optional[ServiceType], optional): find jobs based on service type. Defaults to None
         state (Optional[State], optional): find jobs based on the state. Defaults to None
     Returns:
         List[MlexJob]: [Full object MlexJob that match the query parameters]
     """
-    jobs = svc_context.comp_svc.get_jobs(user=user, mlex_app=mlex_app, host_uid=host_uid, state=state)
+    jobs = svc_context.comp_svc.get_jobs(user=user, mlex_app=mlex_app, host_uid=host_uid, service_type=service_type,
+                                         state=state)
     return jobs
 
 
