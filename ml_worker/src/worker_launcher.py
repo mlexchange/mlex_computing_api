@@ -110,3 +110,4 @@ if __name__ == '__main__':
                 status = Status(state="failed", return_code=str(err))
                 update_worker_status(new_worker.uid, status)
             new_worker = None
+        time.sleep(3)

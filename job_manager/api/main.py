@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from starlette.config import Config
 import uvicorn
 
-from model import MlexHost, MlexJob, MlexWorker, MlexWorkflow, UserWorkflow, Status, ResourcesQuery, States
+from model import MlexHost, MlexJob, MlexWorker, MlexWorkflow, UserWorkflow, Status, ResourcesQuery, States, ServiceType
 from job_service import ComputeService, Context
 
 
@@ -131,19 +131,34 @@ def get_workflow(uid: str) -> MlexWorkflow:
     return workflow
 
 
+@app.get(API_URL_PREFIX + '/workflows/{uid}/mapping', tags=['workflows'])
+def get_workflow_mapping(uid: str) -> dict:
+    """
+    This function returns the workflow that matches the query parameters
+    Args:
+        uid:            workflow uid
+    Returns:
+        MlexWorkflow: Full object MlexWorkflow that matches the query parameters
+    """
+    workflow = svc_context.comp_svc.get_workflow_mapping(uid=uid)
+    return workflow
+
+
 @app.get(API_URL_PREFIX + '/workflows', tags=['workflows'])
 def get_workflows(user: Optional[str] = None,
-                  host_uid: Optional[str] = None
+                  host_uid: Optional[str] = None,
+                  state: Optional[States] = None
                   ) -> List[MlexWorkflow]:
     """
     This function returns the list of jobs that match the query parameters
     Args:
         user (Optional[str], optional): find workflows based on the user. Defaults to None
         host_uid (Optional[str], optional): find workflows based on the host uid. Defaults to None
+        state (Optional[State], optional): find jobs based on the state. Defaults to None
     Returns:
         List[MlexWorkflow]: [Full object MlexWorkflow that match the query parameters]
     """
-    workflows = svc_context.comp_svc.get_workflows(user=user, host_uid=host_uid)
+    workflows = svc_context.comp_svc.get_workflows(user=user, host_uid=host_uid, state=state)
     return workflows
 
 
@@ -193,6 +208,7 @@ def get_job(uid: str) -> MlexJob:
 def get_jobs(user: Optional[str] = None,
              mlex_app: Optional[str] = None,
              host_uid: Optional[str] = None,
+             service_type: Optional[ServiceType] = None,
              state: Optional[States] = None
              ) -> List[MlexJob]:
     """
@@ -201,11 +217,13 @@ def get_jobs(user: Optional[str] = None,
         user (Optional[str], optional): find jobs based on the user. Defaults to None
         mlex_app (Optional[str], optional): find jobs based on the app that launched the workflow. Defaults to None
         host_uid (Optional[str], optional): find jobs based on the host uid. Defaults to None
+        service_type (Optional[ServiceType], optional): find jobs based on service type. Defaults to None
         state (Optional[State], optional): find jobs based on the state. Defaults to None
     Returns:
         List[MlexJob]: [Full object MlexJob that match the query parameters]
     """
-    jobs = svc_context.comp_svc.get_jobs(user=user, mlex_app=mlex_app, host_uid=host_uid, state=state)
+    jobs = svc_context.comp_svc.get_jobs(user=user, mlex_app=mlex_app, host_uid=host_uid, service_type=service_type,
+                                         state=state)
     return jobs
 
 
@@ -282,7 +300,7 @@ def terminate_worker(uid: str):
 @app.patch(API_URL_PREFIX + '/private/jobs/{uid}/update', tags=['private'], response_model=ResponseModel)
 def update_job(uid: str,
                status: Optional[Status] = None,
-               logs: Optional[str] = None
+               logs: Optional[str] = None,
                ):
     '''
     This function updates the job status
@@ -294,6 +312,21 @@ def update_job(uid: str,
         job_uid
     '''
     svc_context.comp_svc.update_job(uid, status, logs)
+    return ResponseModel(uid=uid)
+
+
+@app.patch(API_URL_PREFIX + '/private/jobs/{uid}/update/mapping', tags=['private'], response_model=ResponseModel)
+def update_job_mapping(uid: str,
+                       ports: Optional[dict] = None,
+                       ):
+    '''
+    This function updates the job status
+    Args:
+        ports:      Dictionary of ports
+    Returns:
+        job_uid
+    '''
+    svc_context.comp_svc.update_job_mapping(uid, ports)
     return ResponseModel(uid=uid)
 
 
