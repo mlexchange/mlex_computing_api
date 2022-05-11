@@ -11,8 +11,6 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: '${MONGO_DB_PASSWORD}'
     volumes:
       - "./database/:/data/db"
-    ports:
-      - "27017:27017"
 
   job-service:
     restart: 'unless-stopped'
