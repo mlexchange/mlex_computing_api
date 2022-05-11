@@ -144,7 +144,7 @@ if __name__ == '__main__':
                 cmd = docker_job.cmd
                 volumes = []
                 if len(new_job.working_directory)>0:
-                    volumes = ['{}:/app/work/data'.format(new_job.working_directory)]
+                    volumes = ['{}:/app/work'.format(new_job.working_directory)]
                     cmd = f"tree -ifo /tmp/file_record_init.txt ; {cmd} ; tree -ifo /tmp/file_record_final.txt"
                     cmd = f'bash -c {json.dumps(cmd)}'
                 else:
