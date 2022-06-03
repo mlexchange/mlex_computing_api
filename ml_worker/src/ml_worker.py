@@ -186,7 +186,7 @@ if __name__ == '__main__':
                                 logs = tmp_logs
                                 update_job_status(new_job.uid, logs=logs)
                         except Exception as err:
-                            logging.error(f'Job {new_job.uid} failed: {str(err)}\n{traceback.format_exc()')
+                            logging.error(f'Job {new_job.uid} failed: {str(err)}\n{traceback.format_exc()}')
                             update_job_status(new_job.uid, status=Status(state="failed", return_code=str(err)))
                     time.sleep(1)
                     container = DOCKER_CLIENT.containers.get(container.id)
@@ -205,6 +205,6 @@ if __name__ == '__main__':
                         except Exception:
                             pass
                         err = "Code: "+str(result["StatusCode"])+ " Error: " + repr(result["Error"])
-                        logging.error(f'Job {new_job.uid} failed: {err}\n{traceback.format_exc()')
+                        logging.error(f'Job {new_job.uid} failed: {err}\n{traceback.format_exc()}')
                         update_job_status(new_job.uid, status=Status(state="failed", return_code=err))
                 # container.remove()
