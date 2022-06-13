@@ -60,19 +60,6 @@ class ResponseModel(BaseModel):
     uid: str
 
 
-@app.post(API_URL_PREFIX + '/workflows', tags=['workflows'])
-def submit_workflow(workflow: UserWorkflow):
-    '''
-    This function submits a new workflow to queue
-    Args:
-        workflow: workflow with list of jobs to execute
-    Returns:
-        workflow_uid if the workflow is valid, -1 if invalid
-    '''
-    new_workflow_uid = svc_context.comp_svc.submit_workflow(workflow=workflow)
-    return new_workflow_uid
-
-
 @app.post(API_URL_PREFIX + '/hosts', tags=['hosts'])
 def submit_host(host: MlexHost):
     '''
@@ -116,6 +103,37 @@ def get_hosts(hostname: str = None,
     '''
     output = svc_context.comp_svc.get_hosts(hostname=hostname, nickname=nickname)
     return output
+
+
+@app.patch(API_URL_PREFIX + '/host/{uid}/reset', tags=['hosts'], response_model=ResponseModel)
+def reset_host(uid: str):
+    '''
+    This function resets the database
+    '''
+    svc_context.comp_svc.reset_host(uid)
+    return ResponseModel(uid=uid)
+
+
+@app.delete(API_URL_PREFIX + '/host/{uid}/delete', tags=['hosts'], response_model=ResponseModel)
+def delete_host(uid: str):
+    '''
+    This function resets the database
+    '''
+    svc_context.comp_svc.delete_host(uid)
+    return ResponseModel(uid=uid)
+
+
+@app.post(API_URL_PREFIX + '/workflows', tags=['workflows'])
+def submit_workflow(workflow: UserWorkflow):
+    '''
+    This function submits a new workflow to queue
+    Args:
+        workflow: workflow with list of jobs to execute
+    Returns:
+        workflow_uid if the workflow is valid, -1 if invalid
+    '''
+    new_workflow_uid = svc_context.comp_svc.submit_workflow(workflow=workflow)
+    return new_workflow_uid
 
 
 @app.get(API_URL_PREFIX + '/workflows/{uid}', tags=['workflows'])
@@ -162,6 +180,19 @@ def get_workflows(user: Optional[str] = None,
     return workflows
 
 
+@app.patch(API_URL_PREFIX + '/workflows/{uid}/terminate', tags=['workflows'], response_model=ResponseModel)
+def terminate_workflow(uid: str):
+    '''
+    This function terminates the workflow
+    Args:
+        uid: Unique workflow identifier
+    Returns:
+        workflow_uid
+    '''
+    svc_context.comp_svc.terminate_workflow(uid)
+    return ResponseModel(uid=uid)
+
+
 @app.get(API_URL_PREFIX + '/workers/{uid}', tags=['workers'])
 def get_worker(uid: str) -> MlexWorker:
     '''
@@ -189,6 +220,19 @@ def get_workers(host_uid: Optional[str] = None,
     '''
     workers = svc_context.comp_svc.get_workers(host_uid=host_uid, state=state)
     return workers
+
+
+@app.patch(API_URL_PREFIX + '/workers/{uid}/terminate', tags=['workers'], response_model=ResponseModel)
+def terminate_worker(uid: str):
+    '''
+    This function terminates the worker operation
+    Args:
+        uid: Unique worker identifier
+    Returns:
+        worker_uid
+    '''
+    svc_context.comp_svc.terminate_worker(uid)
+    return ResponseModel(uid=uid)
 
 
 @app.get(API_URL_PREFIX + '/jobs/{uid}', tags=['jobs'])
@@ -227,6 +271,19 @@ def get_jobs(user: Optional[str] = None,
     return jobs
 
 
+@app.patch(API_URL_PREFIX + '/jobs/{uid}/terminate', tags=['jobs'], response_model=ResponseModel)
+def terminate_job(uid: str):
+    '''
+    This function terminates the job
+    Args:
+        uid: Unique job identifier
+    Returns:
+        job_uid
+    '''
+    svc_context.comp_svc.terminate_job(uid)
+    return ResponseModel(uid=uid)
+
+
 @app.get(API_URL_PREFIX + '/private/jobs', tags=['private'])
 def get_next_job(worker_uid: str) -> MlexJob:
     """
@@ -255,19 +312,6 @@ def get_next_worker(service_type: str, host_uid: str = None) -> MlexWorker:
     return next_worker
 
 
-@app.patch(API_URL_PREFIX + '/workflows/{uid}/terminate', tags=['workflows'], response_model=ResponseModel)
-def terminate_workflow(uid: str):
-    '''
-    This function terminates the workflow
-    Args:
-        uid: Unique workflow identifier
-    Returns:
-        workflow_uid
-    '''
-    svc_context.comp_svc.terminate_workflow(uid)
-    return ResponseModel(uid=uid)
-
-
 @app.patch(API_URL_PREFIX + '/private/workers/{uid}/update', tags=['private'], response_model=ResponseModel)
 def update_worker(uid: str,
                   status: Status
@@ -281,19 +325,6 @@ def update_worker(uid: str,
         worker_uid
     '''
     svc_context.comp_svc.update_worker(uid, status)
-    return ResponseModel(uid=uid)
-
-
-@app.patch(API_URL_PREFIX + '/workers/{uid}/terminate', tags=['workers'], response_model=ResponseModel)
-def terminate_worker(uid: str):
-    '''
-    This function terminates the worker operation
-    Args:
-        uid: Unique worker identifier
-    Returns:
-        worker_uid
-    '''
-    svc_context.comp_svc.terminate_worker(uid)
     return ResponseModel(uid=uid)
 
 
@@ -330,17 +361,13 @@ def update_job_mapping(uid: str,
     return ResponseModel(uid=uid)
 
 
-@app.patch(API_URL_PREFIX + '/jobs/{uid}/terminate', tags=['jobs'], response_model=ResponseModel)
-def terminate_job(uid: str):
+@app.delete(API_URL_PREFIX + '/system/reset', tags=['system'], response_model=str)
+def delete_database():
     '''
-    This function terminates the job
-    Args:
-        uid: Unique job identifier
-    Returns:
-        job_uid
+    This function resets the database
     '''
-    svc_context.comp_svc.terminate_job(uid)
-    return ResponseModel(uid=uid)
+    svc_context.comp_svc.reset_system()
+    return "OK"
 
 
 if __name__ == '__main__':

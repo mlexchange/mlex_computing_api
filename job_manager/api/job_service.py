@@ -40,7 +40,21 @@ class ComputeService:
         self._collection_worker_list = self._db.worker_list
         self._collection_job_list = self._db.job_list
         self._create_indexes()
-
+    
+    def reset_system(self) -> str:
+        '''
+        Resets database
+        Returns:
+            OK message
+        '''
+        self._collection_job_list.delete_many({})
+        self._collection_worker_list.delete_many({})
+        self._collection_workflow_list.delete_many({})
+        host_list = self.get_hosts()
+        for host in host_list:
+            self.reset_host(host.uid)
+        return "OK"
+    
     def submit_host(self, host: MlexHost) -> MlexHost:
         '''
         Submits host to MLExchange
@@ -56,6 +70,30 @@ class ComputeService:
         mlex_host_dict = mlex_host.dict()
         self._collection_resources_list.insert_one(mlex_host_dict)
         return mlex_host.uid
+    
+    def reset_host(self, host_uid) -> str:
+        '''
+        Resets host resources in database
+        Args:
+            host_uid: [str] host uid
+        Returns:
+            host_uid
+        '''
+        self._collection_resources_list.update_one({"uid": host_uid},
+                                                   [{"$set": {"frontend_available": "$frontend_constraints",
+                                                              "backend_available": "$backend_constraints"}}])
+        return host_uid
+    
+    def delete_host(self, host_uid) -> str:
+        '''
+        Deletes host in database
+        Args:
+            host_uid: [str] host uid
+        Returns:
+            host_uid
+        '''
+        self._collection_resources_list.delete_one({'uid': host_uid})
+        return host_uid
 
     def submit_workflow(self, workflow: UserWorkflow) -> MlexWorkflow:
         '''
