@@ -60,12 +60,12 @@ SIDEBAR = [
             dbc.CardBody([
                 dbc.InputGroup([
                     dbc.InputGroupText("Name: "),
-                    dbc.Input(id="query-name", placeholder="local", type="text")],
+                    dbc.Input(id="query-name", placeholder="e.g. local", type="text")],
                     className="mb-3",
                 ),
                 dbc.InputGroup([
                     dbc.InputGroupText("Hostname: "),
-                    dbc.Input(id="query-hostname", placeholder="local.als.lbl.gov", type="text")],
+                    dbc.Input(id="query-hostname", placeholder="e.g. local.als.lbl.gov", type="text")],
                     className="mb-3",
                 ),
                 dbc.InputGroup([
