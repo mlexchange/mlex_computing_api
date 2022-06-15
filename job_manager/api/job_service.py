@@ -47,12 +47,12 @@ class ComputeService:
         Returns:
             OK message
         '''
-        self._collection_job_list.delete_many({})
-        self._collection_worker_list.delete_many({})
-        self._collection_workflow_list.delete_many({})
         host_list = self.get_hosts()
         for host in host_list:
             self.reset_host(host.uid)
+        self._collection_job_list.delete_many({})
+        self._collection_worker_list.delete_many({})
+        self._collection_workflow_list.delete_many({})
         return "OK"
     
     def submit_host(self, host: MlexHost) -> MlexHost:
@@ -79,6 +79,15 @@ class ComputeService:
         Returns:
             host_uid
         '''
+        workflows = self.get_workflows(host_uid=host_uid)
+        for workflow in workflows:
+            self.terminate_workflow(workflow.uid)
+        # check if the workflows have been completely canceled
+        workflows_status = [workflow.status.state for workflow in workflows]
+        while len(set(['queue', 'running', 'warning']) & set(workflows_status))>0:
+            workflows = self.get_workflows(host_uid=host_uid)
+            workflows_status = [workflow.status.state for workflow in workflows]
+        # reset resources
         self._collection_resources_list.update_one({"uid": host_uid},
                                                    [{"$set": {"frontend_available": "$frontend_constraints",
                                                               "backend_available": "$backend_constraints"}}])
@@ -92,6 +101,15 @@ class ComputeService:
         Returns:
             host_uid
         '''
+        workflows = self.get_workflows(host_uid=host_uid)
+        for workflow in workflows:
+            self.terminate_workflow(workflow.uid)
+        # check if the workflows have been completely canceled
+        workflows_status = [workflow.status.state for workflow in workflows]
+        while len(set(['queue', 'running', 'warning']) & set(workflows_status)) > 0:
+            workflows = self.get_workflows(host_uid=host_uid)
+            workflows_status = [workflow.status.state for workflow in workflows]
+        # delete host
         self._collection_resources_list.delete_one({'uid': host_uid})
         return host_uid
 
@@ -933,6 +951,9 @@ class ComputeService:
         # #                     {"dependencies.$": -1}}
 
     def _create_indexes(self):
+        self._collection_resources_list.create_index([('nickname', 1)], unique=True)
+        self._collection_resources_list.create_index([('hostname', 1)], unique=True)
+
         self._collection_workflow_list.create_index([('uid', 1)], unique=True)
         self._collection_workflow_list.create_index([('user_uid', 1)])
         self._collection_workflow_list.create_index([('workflow_type', 1)])

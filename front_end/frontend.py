@@ -60,12 +60,12 @@ SIDEBAR = [
             dbc.CardBody([
                 dbc.InputGroup([
                     dbc.InputGroupText("Name: "),
-                    dbc.Input(id="query-name", placeholder="Name", type="text")],
+                    dbc.Input(id="query-name", placeholder="local", type="text")],
                     className="mb-3",
                 ),
                 dbc.InputGroup([
                     dbc.InputGroupText("Hostname: "),
-                    dbc.Input(id="query-hostname", placeholder="Hostname", type="text")],
+                    dbc.Input(id="query-hostname", placeholder="local.als.lbl.gov", type="text")],
                     className="mb-3",
                 ),
                 dbc.InputGroup([
@@ -99,37 +99,39 @@ NEW_HOST = html.Div([
             dbc.ModalBody([
                 dbc.InputGroup([
                     dbc.InputGroupText("Name: "),
-                    dbc.Input(id={"type":"nickname", "index":0}, placeholder="Name", type="text")],
+                    dbc.Input(id={"type":"nickname", "index":0}, value="local", type="text")],
                     className="mb-3",
                 ),
                 dbc.InputGroup([
                     dbc.InputGroupText("Hostname: "),
-                    dbc.Input(id={"type":"hostname", "index":0}, placeholder="Hostname", type="text")],
+                    dbc.Input(id={"type":"hostname", "index":0}, value="local.als.lbl.gov", type="text")],
                     className="mb-3",
                 ),
                 dbc.Label("Frontend Constraints:"),
                 dbc.InputGroup([
                     dbc.InputGroupText("Number of workers"),
-                    dbc.Input(id={"type":"front-num-workers", "index":0}, placeholder="Frontend", type="number"),
+                    dbc.Input(id={"type":"front-num-workers", "index":0}, value=2, type="number"),
                     dbc.InputGroupText("Number of CPUs"),
-                    dbc.Input(id={"type":"front-num-processors", "index":0}, placeholder="Frontend", type="number"),
+                    dbc.Input(id={"type":"front-num-processors", "index":0}, value=10, type="number"),
                     dbc.InputGroupText("List of GPUs"),
-                    dbc.Input(id={"type":"front-list-gpus", "index":0}, placeholder="Frontend", type="text")],
+                    dbc.Input(id={"type":"front-list-gpus", "index":0}, value="[]", type="text")],
                     className="mb-3",
                 ),
                 dbc.Label("Backend Constraints:"),
                 dbc.InputGroup([
                     dbc.InputGroupText("Number of workers"),
-                    dbc.Input(id={"type":"back-num-workers", "index":0}, placeholder="Backend", type="number"),
+                    dbc.Input(id={"type":"back-num-workers", "index":0}, value=2, type="number"),
                     dbc.InputGroupText("Number of CPUs"),
-                    dbc.Input(id={"type":"back-num-processors", "index":0}, placeholder="Backend", type="number"),
+                    dbc.Input(id={"type":"back-num-processors", "index":0}, value=10, type="number"),
                     dbc.InputGroupText("List of GPUs"),
-                    dbc.Input(id={"type":"back-list-gpus", "index":0}, placeholder="Backend", type="text")],
+                    dbc.Input(id={"type":"back-list-gpus", "index":0}, value="[]", type="text")],
                     className="mb-3",
                 ),
                 dbc.InputGroup([
-                    dbc.InputGroupText("Public?"),
-                    daq.BooleanSwitch(id={"type":'privacy', "index":0}, on=False)],
+                    dbc.InputGroupText("Privacy:"),
+                    daq.BooleanSwitch(id={"type":'privacy', "index":0}, on=False),
+                    html.Div(id="privacy-toggle")
+                ],
                     className="mb-3",
                 ),
                 dbc.InputGroup([
@@ -172,20 +174,21 @@ RESOURCES_TABLE = dbc.Card(
                 children=[
                     dbc.Row(
                         [dbc.Col(dbc.Button("RESET DATABASE",
-                                       outline=True,
-                                       color="danger",
-                                       id="reset-database",
-                                       style={"text-transform": "none", "width":"100%"})),
+                                            outline=True,
+                                            color="danger",
+                                            id="reset-database",
+                                            style={"text-transform": "none", "width":"100%"})),
                          dbc.Col(dbc.Button("RESET HOST",
-                                       outline=True,
-                                       color="danger",
-                                       id="reset-host",
-                                       style={"text-transform": "none", "width":"100%"})),
+                                            outline=True,
+                                            color="danger",
+                                            id="reset-host",
+                                            style={"text-transform": "none", "width":"100%"})),
                          dbc.Col(dbc.Button("DELETE HOST",
-                                       outline=True,
-                                       color="danger",
-                                       id="delete-host",
-                                       style={"text-transform": "none", "width":"100%"}))],
+                                            outline=True,
+                                            color="danger",
+                                            id="delete-host",
+                                            disabled=True,
+                                            style={"text-transform": "none", "width":"100%"}))],
                         style={'margin-bottom': '1rem'}
                     ),
                     dash_table.DataTable(
@@ -253,6 +256,17 @@ app.layout = html.Div(
 
 ##### CALLBACKS ####
 @app.callback(
+    Output("privacy-toggle", "children"),
+    Input({'type':'privacy', "index": ALL}, "on")
+)
+def privacy_toggle(privacy):
+    if privacy[0]:
+        return "Public"
+    else:
+        return "Private"
+
+
+@app.callback(
     Output("comp-table", "data"),
     Output("host-store", "data"),
     Input("query-host", "n_clicks"),
@@ -262,19 +276,26 @@ app.layout = html.Div(
     State("query-hostname", "value"),
     State("host-store", "data")
 )
-def load_resources_list(query_n_clicks, close_msg, time_interval, name, hostname, host_store):
+def load_resources_list(query_n_clicks, close_msg, time_interval, nickname_query, hostname_query, host_store):
     '''
     This callback dynamically populates the list of computing hosts
     Args:
         query_n_clicks:     [int] Button that triggers the callback
         close_msg:          [int] Button that closes pop-up messages (when updating/deleting hosts of database)
         time_interval:      [int] time
-        name:               [str] Nickname of compute resource
-        hostname:           [str] Hostname of compute resource
+        nickname_query:     [str] Nickname of compute resource
+        hostname_query:     [str] Hostname of compute resource
     Returns:
         comp_table:         [List] List of compute resources
     '''
-    host_list = requests.get(f'{COMP_URL}hosts', params={'hostname': hostname, 'nickname': name}).json()
+    changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
+
+    if "query-host" in changed_id:
+        host_list = requests.get(f'{COMP_URL}hosts', params={'hostname': hostname_query,
+                                                             'nickname': nickname_query}).json()
+    else:
+        host_list = requests.get(f'{COMP_URL}hosts').json()
+
     if host_store != host_list:
         comp_table = []
         host_store = host_list
@@ -356,6 +377,8 @@ def plot_resources(row, time, comp_table, current_fig):
     Output("modal-msg", "is_open"),
     Output('new-host', 'is_open'),
     Output("action", "data"),
+    Output({'type':'nickname', "index": ALL}, 'value'),
+    Output({'type':'hostname', "index": ALL}, 'value'),
 
     Input("reset-database", "n_clicks"),
     Input("reset-host", "n_clicks"),
@@ -371,19 +394,21 @@ def plot_resources(row, time, comp_table, current_fig):
     State("action", "data"),
     State({'type':'nickname', "index": ALL}, 'value'),
     State({'type':'hostname', "index": ALL}, 'value'),
-    State({'type':'privacy', "index": ALL}, 'value'),
+    State({'type':'privacy', "index": ALL}, 'on'),
     State({'type':'front-num-workers', "index": ALL}, 'value'),
     State({'type':'front-num-processors', "index": ALL}, 'value'),
     State({'type':'front-list-gpus', "index": ALL}, 'value'),
     State({'type':'back-num-workers', "index": ALL}, 'value'),
     State({'type':'back-num-processors', "index": ALL}, 'value'),
     State({'type':'back-list-gpus', "index": ALL}, 'value'),
+    State("query-name", "value"),
+    State("query-hostname", "value"),
     prevent_initial_call=True
 )
-def show_messages(reset_database_click, reset_host_click, delete_host_click, row, open_new_host, submit_new_host,
-                  cancel_del_click, confirm_del_click, close_error_click, comp_table, action, nickname, hostname,
+def show_messages(reset_database_click, reset_host_click, delete_host_click, row, cancel_del_click, confirm_del_click,
+                  close_error_click, open_new_host, submit_new_host, comp_table, action, nickname, hostname,
                   privacy, front_num_workers, front_num_cpus, front_list_gpus, back_num_workers, back_num_cpus,
-                  back_list_gpus):
+                  back_list_gpus, query_name, query_hostname):
     '''
     This callback managers pop-up messages
     Args:
@@ -391,11 +416,11 @@ def show_messages(reset_database_click, reset_host_click, delete_host_click, row
         reset_host_click:       [int] Button "reset host" has been selected
         delete_host_click:      [int] Button "delete host" has been selected
         row:                    [List] Selected row in comp_table
-        open_new_host:          [int]  Open form to submit new host
-        submit_new_host:        [int] Submit new host
         cancel_del_click:       [int] Button "cancel" has been selected in confirmation window
         confirm_del_click:      [int] Button "confirm" has been selected in confirmation window
         close_error_click:      [int] Close message
+        open_new_host:          [int]  Open form to submit new host
+        submit_new_host:        [int] Submit new host
         comp_table:             [List] Information in comp_table
         action:                 [int] Action to confirm
         nickname:               [str] Host nickname
@@ -407,6 +432,8 @@ def show_messages(reset_database_click, reset_host_click, delete_host_click, row
         back_num_workers:       [int] Number of workers for backend services
         back_num_cpus:          [int] Number of processors for backend services
         back_list_gpus:         [str] List of GPUs for backend services
+        query_name:             [str] Nickname of compute resource for query or new host
+        query_hostname:         [str] Hostname of compute resource for query or new host
     Return:
         warning_body:           [str] Warning message body
         warning_open:           [bool] Open/close warning message
@@ -414,13 +441,18 @@ def show_messages(reset_database_click, reset_host_click, delete_host_click, row
         msg_open:               [bool] Open pop-up message
         open_host_form:         [bool] Open new host form
         action:                 [int] Action to confirm
+        nickname_out:           [str] Host nickname
+        hostname_out:           [str] Hostname
     '''
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
+    print(changed_id)
     warning_body = dash.no_update
     warning_open = dash.no_update
     msg_body = dash.no_update
     msg_open = dash.no_update
     open_host_form = dash.no_update
+    nickname_out = dash.no_update
+    hostname_out = dash.no_update
     
     if 'reset-database' in changed_id:
         warning_body ='The workflow database will be deleted with this action. Do you want to continue?'
@@ -464,12 +496,16 @@ def show_messages(reset_database_click, reset_host_click, delete_host_click, row
         warning_open = False
         action = -1
         if response == 200:
-            msg_body = 'The changes were completed succesfully'
+            msg_body = 'The changes were completed succesfully. It can take some few seconds for the changes to be ' \
+                       'reflected on the plot.'
         else:
             msg_body = f'Error {response}'
         msg_open = True
+        print(f'variable {msg_open}')
 
     if 'open-new-host' in changed_id:
+        nickname_out = query_name
+        hostname_out = query_hostname
         open_host_form = True
 
     if 'submit-new-host' in changed_id:
@@ -488,7 +524,7 @@ def show_messages(reset_database_click, reset_host_click, delete_host_click, row
         msg_open = False
         action = -1
 
-    return warning_body, warning_open, msg_body, msg_open, open_host_form, action
+    return warning_body, warning_open, msg_body, msg_open, open_host_form, action, [nickname_out], [hostname_out]
 
 
 if __name__ == "__main__":
