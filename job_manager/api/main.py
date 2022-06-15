@@ -3,7 +3,7 @@ import os
 from typing import List, Optional
 
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, parse_obj_as
 from starlette.config import Config
 import uvicorn
 
@@ -58,6 +58,7 @@ def set_compute_service(new_comp_svc: ComputeService):
 
 class ResponseModel(BaseModel):
     uid: str
+    flag: Optional[bool]
 
 
 @app.post(API_URL_PREFIX + '/hosts', tags=['hosts'])
@@ -110,8 +111,17 @@ def reset_host(uid: str):
     '''
     This function resets the database
     '''
-    svc_context.comp_svc.reset_host(uid)
-    return ResponseModel(uid=uid)
+    host_uid, flag = svc_context.comp_svc.reset_host(uid)
+    return ResponseModel(uid=host_uid, flag=flag)
+
+
+@app.patch(API_URL_PREFIX + '/host/{uid}/hard_reset', tags=['hosts'], response_model=ResponseModel)
+def hard_reset_host(uid: str):
+    '''
+    This function hard resets the database
+    '''
+    response = svc_context.comp_svc.hard_reset_host(uid)
+    return ResponseModel(uid=response)
 
 
 @app.delete(API_URL_PREFIX + '/host/{uid}/delete', tags=['hosts'], response_model=ResponseModel)
@@ -119,8 +129,8 @@ def delete_host(uid: str):
     '''
     This function resets the database
     '''
-    svc_context.comp_svc.delete_host(uid)
-    return ResponseModel(uid=uid)
+    response, flag = svc_context.comp_svc.delete_host(uid)
+    return ResponseModel(uid=response, flag=flag)
 
 
 @app.post(API_URL_PREFIX + '/workflows', tags=['workflows'])
@@ -361,13 +371,22 @@ def update_job_mapping(uid: str,
     return ResponseModel(uid=uid)
 
 
-@app.delete(API_URL_PREFIX + '/system/reset', tags=['system'], response_model=str)
-def delete_database():
+@app.delete(API_URL_PREFIX + '/system/reset', tags=['system'], response_model=List[ResponseModel])
+def reset_system():
     '''
     This function resets the database
     '''
-    svc_context.comp_svc.reset_system()
-    return "OK"
+    response = svc_context.comp_svc.reset_system()
+    return parse_obj_as(List[ResponseModel], response)
+
+
+@app.delete(API_URL_PREFIX + '/system/hard_reset', tags=['system'], response_model=str)
+def hard_reset_system():
+    '''
+    This function resets the database
+    '''
+    response = svc_context.comp_svc.hard_reset_system()
+    return response
 
 
 if __name__ == '__main__':
