@@ -84,6 +84,7 @@ class ComputeService:
             self.terminate_workflow(workflow.uid)
         # check if the workflows have been completely canceled
         workflows_status = [workflow.status.state for workflow in workflows]
+        print(workflows_status)
         while len(set(['queue', 'running', 'warning']) & set(workflows_status))>0:
             workflows = self.get_workflows(host_uid=host_uid)
             workflows_status = [workflow.status.state for workflow in workflows]
@@ -707,8 +708,8 @@ class ComputeService:
                 status.state = 'complete with errors'
             # if it is not the last worker in workflow and the worker has failed, completed with errors or was
             # terminated or canceled, the workflow is tagged with a "warning"
-            elif workflow.status.state == 'warning' or \
-                    status.state in ['failed', 'terminated', 'canceled', 'complete with errors']:
+            elif not last_worker and (workflow.status.state == 'warning' or \
+                    status.state in ['failed', 'terminated', 'canceled', 'complete with errors']):
                 status.state = 'warning'
             # if it is not the last worker, but it has completed it's execution
             elif not last_worker and status.state == 'complete':
