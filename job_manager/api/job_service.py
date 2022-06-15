@@ -1,3 +1,5 @@
+import time
+
 from datetime import datetime
 from itertools import compress
 from uuid import uuid4
@@ -40,7 +42,37 @@ class ComputeService:
         self._collection_worker_list = self._db.worker_list
         self._collection_job_list = self._db.job_list
         self._create_indexes()
-
+    
+    def reset_system(self) -> List:
+        '''
+        Resets database
+        Returns:
+            response_list
+        '''
+        host_list = self.get_hosts()
+        response_list = []
+        tflag = False
+        for host in host_list:
+            uid, flag = self.reset_host(host.uid)
+            response_list.append({'uid': uid, 'flag': flag})
+            tflag = tflag or flag
+        if not tflag:
+            self._collection_job_list.delete_many({})
+            self._collection_worker_list.delete_many({})
+            self._collection_workflow_list.delete_many({})
+        return response_list
+    
+    def hard_reset_system(self) -> str:
+        '''
+        Hard resets database
+        Returns:
+            OK message
+        '''
+        self._collection_job_list.delete_many({})
+        self._collection_worker_list.delete_many({})
+        self._collection_workflow_list.delete_many({})
+        return 'OK'
+    
     def submit_host(self, host: MlexHost) -> MlexHost:
         '''
         Submits host to MLExchange
@@ -56,6 +88,62 @@ class ComputeService:
         mlex_host_dict = mlex_host.dict()
         self._collection_resources_list.insert_one(mlex_host_dict)
         return mlex_host.uid
+    
+    def reset_host(self, host_uid) -> (str, bool):
+        '''
+        Resets host resources in database
+        Args:
+            host_uid: [str] host uid
+        Returns:
+            host_uid
+            flag:     [bool] flag that indicates if there are hanging containers in the host
+        '''
+        workflows = self.get_workflows(host_uid=host_uid)
+        for workflow in workflows:
+            self.terminate_workflow(workflow.uid)
+        # check if the workflows have been completely canceled
+        workflows_status = [workflow.status.state for workflow in workflows]
+        count = 0       # up to 20s for all processes to terminate
+        while len(set(['queue', 'running', 'warning']) & set(workflows_status)) > 0 and count<2000:
+            workflows = self.get_workflows(host_uid=host_uid)
+            workflows_status = [workflow.status.state for workflow in workflows]
+            count += 1
+            time.sleep(0.01)
+        if count>=2000:
+            return host_uid, True
+        return host_uid, False
+    
+    def hard_reset_host(self, host_uid) -> str:
+        self._collection_resources_list.update_one({"uid": host_uid},
+                                                   [{"$set": {"frontend_available": "$frontend_constraints",
+                                                              "backend_available": "$backend_constraints"}}])
+        return host_uid
+    
+    def delete_host(self, host_uid) -> (str, bool):
+        '''
+        Deletes host in database
+        Args:
+            host_uid: [str] host uid
+        Returns:
+            host_uid
+        '''
+        workflows = self.get_workflows(host_uid=host_uid)
+        for workflow in workflows:
+            self.terminate_workflow(workflow.uid)
+        # check if the workflows have been completely canceled
+        workflows_status = [workflow.status.state for workflow in workflows]
+        count = 0       # up to 20s for all processes to terminate
+        while len(set(['queue', 'running', 'warning']) & set(workflows_status)) > 0 and count < 2000:
+            workflows = self.get_workflows(host_uid=host_uid)
+            workflows_status = [workflow.status.state for workflow in workflows]
+            count += 1
+            time.sleep(0.01)
+        if count>=2000:
+            return host_uid, True
+        else:
+            # delete host
+            self._collection_resources_list.delete_one({'uid': host_uid})
+        return host_uid, False
 
     def submit_workflow(self, workflow: UserWorkflow) -> MlexWorkflow:
         '''
@@ -605,6 +693,9 @@ class ComputeService:
         workflow = self.get_workflow(uid=workflow_uid)
         if not workflow:
             raise JobNotFound(f"no workflow with id: {workflow_uid}")
+        # terminate workers in workflow
+        for worker in workflow.workers_list:
+            self.terminate_worker(worker_uid=worker)
         # terminate if if has not finalized yet
         self._collection_workflow_list.update_one(
             {'uid': workflow_uid, 'status.state': {'$nin': ['complete', 'failed', 'complete with errors']}},
@@ -614,8 +705,6 @@ class ComputeService:
             {'uid': workflow_uid, 'status.state': 'queue'},
             {'$set': {'terminate': True, 'status.state': 'canceled'}}
         )
-        for worker in workflow.workers_list:
-            self.terminate_worker(worker_uid=worker)
         pass
 
     def update_worker(self, worker_uid: str, status: Status):
@@ -634,6 +723,7 @@ class ComputeService:
                     {'uid': worker_uid},
                     {'$set': {'status': status.dict(), "timestamps.end_time": datetime.utcnow()}})
                 self.update_host(worker.host_uid, worker.requirements, worker.service_type)
+                print(f'host is being updates {worker.requirements}')
             else:
                 self._collection_worker_list.update_one(
                     {'uid': worker_uid},
@@ -651,12 +741,14 @@ class ComputeService:
                 status.state = 'complete with errors'
             # if it is not the last worker in workflow and the worker has failed, completed with errors or was
             # terminated or canceled, the workflow is tagged with a "warning"
-            elif workflow.status.state == 'warning' or \
-                    status.state in ['failed', 'terminated', 'canceled', 'complete with errors']:
+            elif not last_worker and (workflow.status.state == 'warning' or \
+                    status.state in ['failed', 'terminated', 'canceled', 'complete with errors']):
                 status.state = 'warning'
             # if it is not the last worker, but it has completed it's execution
             elif not last_worker and status.state == 'complete':
                 status.state = 'running'
+            print(f'current workflow state: {workflow.status.state}')
+            print(f'being changed to: {status.state}')
             if workflow.status.state != status.state:               # update if status has changed
                 self.update_workflow(workflow_uid=workflow.uid, status=status)
         pass
@@ -672,6 +764,9 @@ class ComputeService:
         worker = self.get_worker(uid=worker_uid)
         if not worker:
             raise WorkerNotFound(f"no worker with id: {worker_uid}")
+        # terminate the jobs in worker
+        for job in worker.jobs_list:
+            self.terminate_job(job)
         # terminate if it has not been completed yet
         self._collection_worker_list.update_one(
             {'uid': worker_uid, 'status.state': {'$nin': ['complete', 'failed', 'complete with errors']}},
@@ -681,8 +776,6 @@ class ComputeService:
             {'uid': worker_uid, 'status.state': 'queue'},
             {'$set': {'terminate': True, 'status.state': 'canceled'}}
         )
-        for job in worker.jobs_list:        # terminate the jobs in worker
-            self.terminate_job(job)
         pass
 
     def update_job(self, job_uid: str, status: Status, logs: str = None):
@@ -895,6 +988,9 @@ class ComputeService:
         # #                     {"dependencies.$": -1}}
 
     def _create_indexes(self):
+        self._collection_resources_list.create_index([('nickname', 1)], unique=True)
+        self._collection_resources_list.create_index([('hostname', 1)], unique=True)
+
         self._collection_workflow_list.create_index([('uid', 1)], unique=True)
         self._collection_workflow_list.create_index([('user_uid', 1)])
         self._collection_workflow_list.create_index([('workflow_type', 1)])
