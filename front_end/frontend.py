@@ -445,7 +445,6 @@ def show_messages(reset_database_click, reset_host_click, delete_host_click, row
         hostname_out:           [str] Hostname
     '''
     changed_id = [p['prop_id'] for p in dash.callback_context.triggered][0]
-    print(changed_id)
     warning_body = dash.no_update
     warning_open = dash.no_update
     msg_body = dash.no_update
@@ -485,23 +484,45 @@ def show_messages(reset_database_click, reset_host_click, delete_host_click, row
         action = -1
 
     if 'warning-body.submit_n_clicks' in changed_id:
+        description = ''
         if action == 0:
-            response = requests.delete(f'{COMP_URL}system/reset').status_code
+            comp_req = requests.delete(f'{COMP_URL}system/reset')
+            response_details = comp_req.json()
+            for detail in response_details:
+                if detail['flag']:
+                    host_uid = detail['uid']
+                    description += f' Host {host_uid}'
+            if len(description)>0:
+                description += ' has/have unfinished processes. Please wait until these processes are completely' \
+                               ' terminated and try again.'
         if action == 1:
             host_uid = comp_table[row[0]]["host_id"]
-            response = requests.patch(f'{COMP_URL}host/{host_uid}/reset').status_code
+            comp_req = requests.patch(f'{COMP_URL}host/{host_uid}/reset')
+            response_details = comp_req.json()
+            if response_details['flag']:
+                host_uid = response_details['uid']
+                description += f' Host {host_uid}'
+            if len(description) > 0:
+                description += ' has unfinished processes. It can take some few seconds for the changes to be ' \
+                               'reflected on the plot.'
         if action == 2:
             host_uid = comp_table[row[0]]["host_id"]
-            response = requests.delete(f'{COMP_URL}host/{host_uid}/delete').status_code
+            comp_req = requests.delete(f'{COMP_URL}host/{host_uid}/delete')
+            response_details = comp_req.json()
+            if response_details['flag']:
+                host_uid = response_details['uid']
+                description += f' Host {host_uid}'
+            if len(description) > 0:
+                description += ' has unfinished processes. Please wait until these processes are completely' \
+                               ' terminated and try again.'
+        response = comp_req.status_code
         warning_open = False
         action = -1
         if response == 200:
-            msg_body = 'The changes were completed succesfully. It can take some few seconds for the changes to be ' \
-                       'reflected on the plot.'
+            msg_body = f'The changes were completed succesfully.{description}'
         else:
-            msg_body = f'Error {response}'
+            msg_body = f'Error code: {response}'
         msg_open = True
-        print(f'variable {msg_open}')
 
     if 'open-new-host' in changed_id:
         nickname_out = query_name
