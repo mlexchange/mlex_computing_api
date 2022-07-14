@@ -821,6 +821,9 @@ class ComputeService:
                 if worker.status.state != status.state:                       # update if state has changed
                     self.update_worker(worker_uid=worker.uid, status=status)
         if logs:
+            current_logs = job.logs
+            if current_logs is not None:
+                logs = current_logs + logs
             self._collection_job_list.update_one(
                 {'uid': job_uid},
                 {'$set': {'logs': logs}}
