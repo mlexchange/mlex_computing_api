@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import math
 import subprocess
 import time
 import traceback
@@ -70,13 +71,20 @@ def update_job_status(job_id, status=None, logs=None):
     Returns:
         None
     '''
+    count=0
     json = None
     params = None
+    num_msgs = 1
     if status:
         json = status.dict()
     if logs:
-        params = {'logs': logs}
-    response = requests.patch(f'{COMP_API_URL}private/jobs/{job_id}/update', params=params, json=json)
+        if len(logs) > 50000:
+            num_msgs = math.ceil(len(logs) / 50000)
+    for i in range(num_msgs):
+        if logs:
+            min_value = min((i + 1) * 50000, len(logs))
+            params = {'logs': logs[i * 50000:min_value]}
+        response = requests.patch(f'{COMP_API_URL}private/jobs/{job_id}/update', params=params, json=json)
     if status:
         logging.info(f'\"Update job {job_id} with status {status.state}\" {response.status_code}')
     else:
@@ -167,8 +175,9 @@ if __name__ == '__main__':
                                                          volumes=volumes,
                                                          detach=True)
             except Exception as err:
-                logging.error(f'Job {new_job.uid} failed: {str(err)}\n{traceback.format_exc()}')
-                update_job_status(new_job.uid, status=Status(state="failed", return_code=str(err)))
+                if str(err) != '(\'Connection aborted.\', ConnectionResetError(104, \'Connection reset by peer\'))':
+                    logging.error(f'Job {new_job.uid} failed: {str(err)}\n{traceback.format_exc()}')
+                    update_job_status(new_job.uid, status=Status(state="failed", return_code=str(err)))
             else:
                 container.reload()      # to get the ports
                 update_job_mapping(new_job.uid, container.ports)
@@ -183,24 +192,28 @@ if __name__ == '__main__':
                             # retrieve logs and check if new assets have been created
                             tmp_logs = container.logs(stdout=True)
                             if logs != tmp_logs:
+                                update_job_status(new_job.uid, logs=tmp_logs[len(logs):])
                                 logs = tmp_logs
-                                update_job_status(new_job.uid, logs=logs)
                         except Exception as err:
-                            logging.error(f'Job {new_job.uid} failed: {str(err)}\n{traceback.format_exc()}')
-                            update_job_status(new_job.uid, status=Status(state="failed", return_code=str(err)))
+                            if str(err) != '(\'Connection aborted.\', ConnectionResetError(104, \'Connection reset by peer\'))':
+                                logging.error(f'Job {new_job.uid} failed: {str(err)}\n{traceback.format_exc()}')
+                                update_job_status(new_job.uid, status=Status(state="failed", return_code=str(err)))
                     time.sleep(1)
                     container = DOCKER_CLIENT.containers.get(container.id)
                 result = container.wait()
                 if result["StatusCode"] == 0:
-                    logs = container.logs(stdout=True)
+                    tmp_logs = container.logs(stdout=True)
+                    logs = tmp_logs[len(logs):]
                     update_job_status(new_job.uid, status=Status(state="complete"), logs=logs)
+                    logs = tmp_logs
                     if len(new_job.working_directory) > 0:
                         check_assets(container.name, new_job.uid)
                 else:
                     if new_job.terminate is None:
                         try:
                             output = container.logs(stdout=True)
-                            update_job_status(new_job.uid, logs=logs)
+                            update_job_status(new_job.uid, logs=output[len(logs):])
+                            logs = output
                             check_assets(container, new_job.uid)
                         except Exception:
                             pass
