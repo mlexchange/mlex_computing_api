@@ -81,8 +81,9 @@ def update_job_status(job_id, status=None, logs=None):
         if len(logs) > 50000:
             num_msgs = math.ceil(len(logs) / 50000)
     for i in range(num_msgs):
-        min_value = min((i + 1) * 50000, len(logs))
-        params = {'logs': logs[i * 50000:min_value]}
+        if logs:
+            min_value = min((i + 1) * 50000, len(logs))
+            params = {'logs': logs[i * 50000:min_value]}
         response = requests.patch(f'{COMP_API_URL}private/jobs/{job_id}/update', params=params, json=json)
     if status:
         logging.info(f'\"Update job {job_id} with status {status.state}\" {response.status_code}')
