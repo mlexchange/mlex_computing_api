@@ -55,9 +55,11 @@ def get_next_job(worker_uid):
     '''
     response = requests.get(f'{COMP_API_URL}private/jobs', params={'worker_uid': worker_uid})
     job = response.json()
-    if job:
+    if job and job!=-1:
         job = MlexJob.parse_obj(job)
         logging.info(f'Executing job: {job.uid}')
+    elif job == -1:
+        requests.patch(f'{COMP_API_URL}private/workers/{worker_uid}/update', json={'state': 'complete with errors'})
     return job
 
 
@@ -141,10 +143,11 @@ if __name__ == '__main__':
     jobs_list = worker.jobs_list
     num_processors = worker.requirements.num_processors
     list_gpus = worker.requirements.list_gpus
+    new_job = 0
 
-    while len(jobs_list)>0:
+    while len(jobs_list)>0 and new_job!=-1:
         new_job = get_next_job(worker.uid)
-        if new_job:
+        if new_job and new_job!=-1:
             job_uid = new_job.uid
             jobs_list.remove(new_job.uid)
             try:        # launch job

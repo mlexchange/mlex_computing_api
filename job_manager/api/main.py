@@ -294,6 +294,19 @@ def terminate_job(uid: str):
     return ResponseModel(uid=uid)
 
 
+@app.delete(API_URL_PREFIX + '/jobs/{uid}/delete', tags=['jobs'], response_model=ResponseModel)
+def delete_job(uid: str):
+    '''
+    This function deletes the job
+    Args:
+        uid: Unique job identifier
+    Returns:
+        job_uid
+    '''
+    svc_context.comp_svc.delete_job(uid)
+    return ResponseModel(uid=uid)
+
+
 @app.get(API_URL_PREFIX + '/private/jobs', tags=['private'])
 def get_next_job(worker_uid: str) -> MlexJob:
     """
