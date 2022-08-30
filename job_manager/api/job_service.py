@@ -1,3 +1,4 @@
+import logging
 import time
 
 from datetime import datetime
@@ -552,6 +553,17 @@ class ComputeService:
         if item:
             self._clean_id(item)
             job = MlexJob.parse_obj(item)
+        else:
+            job = -1
+            for elem in jobs_list:      # checks if there are further jobs to run in the workflow (in case some have been canceled)
+                try:
+                    details = self.get_job(elem)
+                    if details['status']['state'] not in ['complete', 'failed', 'terminated', 'canceled']:
+                        job=None
+                        break
+                except Exception as e:
+                    print(f'Exception while retrieving next job for worker {worker_uid}: {e}')
+
         return job
 
     def get_jobs(self,
@@ -867,6 +879,22 @@ class ComputeService:
         )
         if results.modified_count>0:        # if the job is cancelled, update dependencies
             self._update_dependencies(job_uid)
+        pass
+
+    def delete_job(self, job_uid: str):
+        '''
+        Deletes a given job
+        Args:
+            job_uid: job unique identifier
+        Returns:
+            None
+        '''
+        self.terminate_job(job_uid)                                             # terminates the job
+        job = self._collection_job_list.find_one({"uid": job_uid})
+        while job['status']['state'] not in ['complete', 'failed', 'terminated', 'canceled']: # wait until it terminates
+            time.sleep(1)
+            job = self._collection_job_list.find_one({"uid": job_uid})
+        self._collection_job_list.delete_one({'uid': job_uid})                  # deletes
         pass
 
     def split_workers(self, user_workflow: UserWorkflow):
