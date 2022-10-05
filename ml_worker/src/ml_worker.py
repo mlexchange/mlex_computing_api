@@ -175,6 +175,7 @@ if __name__ == '__main__':
                                                          device_requests=device_requests,
                                                          command=cmd,
                                                          ports=ports,
+                                                         network='computing_api_default',
                                                          volumes=volumes,
                                                          detach=True)
             except Exception as err:
