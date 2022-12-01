@@ -73,6 +73,7 @@ def update_worker_status(worker_id, status: Status):
 
 
 COMP_API_URL = 'http://job-service:8080/api/v0/'
+MLWORKER_URI = str(os.environ['WORKER_IMAGE'])
 NUM_PROCESSORS = int(os.environ['NUM_PROCESSORS'])      # number of processors assigned to ml_workers
 NETWORK = str(os.environ['NETWORK'])
 HOST = ast.literal_eval(os.environ['HOST'])
@@ -84,6 +85,7 @@ if __name__ == '__main__':
 
     host = MlexHost.parse_obj(HOST)         # Get host UID
     host_uid = get_host(host)
+    mlworker_image = DOCKER_CLIENT.images.pull(MLWORKER_URI)
 
     cont = -1
     while True and host_uid!=-1:
@@ -99,7 +101,7 @@ if __name__ == '__main__':
         if new_worker:
             try:
                 worker_info = json.dumps(new_worker.dict(), default=str)
-                container = DOCKER_CLIENT.containers.run('mlexchange/dummy-worker',
+                container = DOCKER_CLIENT.containers.run(MLWORKER_URI,
                                                          cpu_count  = NUM_PROCESSORS,
                                                          command    = "python3 src/ml_worker.py \'"+ worker_info+' \'',
                                                          network    = NETWORK,
