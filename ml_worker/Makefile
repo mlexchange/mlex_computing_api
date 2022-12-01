@@ -1,11 +1,11 @@
 TAG 			:= latest	
-USER 			:= mlexchange
-PROJECT			:= dummy-worker
+USER 			:= mlexchange1
+PROJECT			:= dummy-worker:1.0
 
 IMG_WEB_SVC    		:= ${USER}/${PROJECT}:${TAG}
 IMG_WEB_SVC_JYP    	:= ${USER}/${PROJECT_JYP}:${TAG}
 ID_USER			:= ${shell id -u}
-ID_GROUP			:= ${shell id -g}
+ID_GROUP		:= ${shell id -g}
 
 .PHONY:
 

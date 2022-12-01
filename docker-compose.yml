@@ -33,10 +33,7 @@ services:
     build:
       context: 'ml_worker'
       dockerfile: 'docker/Dockerfile'
-    command: sh -c '
-      make build_docker &&
-      sleep 20 &&
-      python3 src/worker_launcher.py'
+    command: 'python3 src/worker_launcher.py'
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "./ml_worker:/app"
@@ -44,6 +41,7 @@ services:
       NUM_PROCESSORS: '${NUM_PROCESSORS}'
       NETWORK: '${COMPOSE_PROJECT_NAME}_default'
       HOST: '${HOST}'
+      WORKER_IMAGE: 'mlexchange1/dummy-worker:1.0'
     depends_on:
       - 'job-service'
 
