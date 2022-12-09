@@ -177,8 +177,8 @@ if __name__ == '__main__':
                                                          ports=ports,
                                                          network='computing_api_default',
                                                          volumes=volumes,
-                                                         environment=docker_job.environment,
-                                                         detach=True)
+                                                         detach=True
+                                                         **docker_job.kwargs)
             except Exception as err:
                 if str(err) != '(\'Connection aborted.\', ConnectionResetError(104, \'Connection reset by peer\'))':
                     logging.error(f'Job {new_job.uid} failed: {str(err)}\n{traceback.format_exc()}')
