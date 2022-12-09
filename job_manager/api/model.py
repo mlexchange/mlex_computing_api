@@ -40,7 +40,8 @@ class DockerJob(BaseModel):
     type: str = 'docker'
     cmd: str = Field(description="command to run")
     map: Optional[dict] = Field(description="{'port1/tcp': '', 'port2/tcp': '', ... }")
-    kwargs: Optional[dict] = Field(description="container kwargs")
+    container_kwargs: Optional[dict] = Field(description="container kwargs")
+    kwargs: Optional[dict] = Field(description="job kwargs")
 
 
 class Resources(BaseModel):
