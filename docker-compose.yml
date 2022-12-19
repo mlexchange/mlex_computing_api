@@ -38,9 +38,12 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock"
       - "./ml_worker:/app"
     environment:
-      NUM_PROCESSORS: '${NUM_PROCESSORS}'
-      NETWORK: '${COMPOSE_PROJECT_NAME}_default'
-      HOST: '${HOST}'
+      NUM_PROCESSORS: 2
+      NETWORK: 'computing_api_default'
+      HOST: '{"nickname":"local", 
+              "hostname":"local.als.lbl.gov",
+              "frontend_constraints": {"num_processors":10, "num_gpus":0, "list_gpus":[], "num_nodes":2},
+              "backend_constraints":{"num_processors":10, "num_gpus":0, "list_gpus":[], "num_nodes":2}}'
       WORKER_IMAGE: 'mlexchange1/dummy-worker:1.0'
     depends_on:
       - 'job-service'
@@ -56,3 +59,7 @@ services:
       - "8050:8050"
     depends_on:
       - 'job-service'
+
+networks: 
+  default:
+    name: "computing_api_default"
