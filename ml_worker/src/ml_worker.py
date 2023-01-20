@@ -170,14 +170,25 @@ if __name__ == '__main__':
                     device_requests.append(docker.types.DeviceRequest(device_ids=list_gpus,
                                                                       capabilities=[['gpu']]
                                                                       )),
-                container = DOCKER_CLIENT.containers.run(docker_job.uri,
-                                                         cpu_count=num_processors,
-                                                         device_requests=device_requests,
-                                                         command=cmd,
-                                                         ports=ports,
-                                                         network='computing_api_default',
-                                                         volumes=volumes,
-                                                         detach=True)
+                if docker_job.container_kwargs:
+                    container = DOCKER_CLIENT.containers.run(docker_job.uri,
+                                                            cpu_count=num_processors,
+                                                            device_requests=device_requests,
+                                                            command=cmd,
+                                                            ports=ports,
+                                                            network='computing_api_default',
+                                                            volumes=volumes,
+                                                            detach=True,
+                                                            **docker_job.container_kwargs)
+                else:
+                    container = DOCKER_CLIENT.containers.run(docker_job.uri,
+                                                            cpu_count=num_processors,
+                                                            device_requests=device_requests,
+                                                            command=cmd,
+                                                            ports=ports,
+                                                            network='computing_api_default',
+                                                            volumes=volumes,
+                                                            detach=True)
             except Exception as err:
                 if str(err) != '(\'Connection aborted.\', ConnectionResetError(104, \'Connection reset by peer\'))':
                     logging.error(f'Job {new_job.uid} failed: {str(err)}\n{traceback.format_exc()}')

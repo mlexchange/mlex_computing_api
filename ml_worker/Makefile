@@ -1,6 +1,6 @@
-TAG 			:= latest	
+TAG 			:= 1.0	
 USER 			:= mlexchange1
-PROJECT			:= dummy-worker:1.0
+PROJECT			:= dummy-worker
 
 IMG_WEB_SVC    		:= ${USER}/${PROJECT}:${TAG}
 IMG_WEB_SVC_JYP    	:= ${USER}/${PROJECT_JYP}:${TAG}
