@@ -25,8 +25,8 @@ def init_logging():
 config = Config(".env")
 JOB_MANAGER_DB_NAME = config("JOB_MANAGER_DB_NAME", cast=str, default="job_manager")
 JOB_MANAGER_LOG_LEVEL = config("JOB_MANAGER_LOG_LEVEL", cast=str, default="INFO")
-MONGO_DB_USERNAME = str(os.environ['MONGO_INITDB_ROOT_USERNAME'])
-MONGO_DB_PASSWORD = str(os.environ['MONGO_INITDB_ROOT_PASSWORD'])
+MONGO_DB_USERNAME = str(os.environ['MONGO_INITDB_ROOT_USERNAME'], default="")
+MONGO_DB_PASSWORD = str(os.environ['MONGO_INITDB_ROOT_PASSWORD'], default="")
 MONGO_DB_URI = "mongodb://%s:%s@mongodb:27017/?authSource=admin" % (MONGO_DB_USERNAME, MONGO_DB_PASSWORD)
 
 API_URL_PREFIX = "/api/v0"
