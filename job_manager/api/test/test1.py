@@ -228,11 +228,11 @@ host1 = {
     'hostname': 'test.als.lbl.gov',
     'frontend_constraints': {'num_processors': 10,
                              'num_gpus': 2,
-                             'list_gpus': [0,3],
+                             'list_gpus': ['0','3'],
                              'num_nodes': 5},
     'backend_constraints': {'num_processors': 5,
                              'num_gpus': 2,
-                             'list_gpus': [1, 2],
+                             'list_gpus': ['1', '2'],
                              'num_nodes': 2},
 }
 
