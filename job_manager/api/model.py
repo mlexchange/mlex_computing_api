@@ -26,44 +26,44 @@ class ServiceType(str, Enum):
 ###################################################### SUBCLASSES ######################################################
 class Status(BaseModel):
     state: States
-    return_code: Optional[str]
+    return_code: Optional[str] = None
 
 
 class TimeStamps(BaseModel):
     submission_time: datetime = Field(default_factory=datetime.utcnow)
-    execution_time: Optional[datetime]
-    end_time: Optional[datetime]
+    execution_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
 
 
 class DockerJob(BaseModel):
     uri: str = Field(description="container uri")
     type: str = 'docker'
     cmd: str = Field(description="command to run")
-    map: Optional[dict] = Field(description="{'port1/tcp': '', 'port2/tcp': '', ... }")
-    container_kwargs: Optional[dict] = Field(description="container kwargs")
-    kwargs: Optional[dict] = Field(description="job kwargs")
+    map: Optional[dict] = Field(description="{'port1/tcp': '', 'port2/tcp': '', ... }", default=None)
+    container_kwargs: Optional[dict] = Field(description="container kwargs", default=None)
+    kwargs: Optional[dict] = Field(description="job kwargs", default=None)
 
 
 class Resources(BaseModel):
-    num_processors: Optional[int] = Field(description="number of processors per node")
-    num_gpus: Optional[int] = Field(description="number of GPUs per node")
+    num_processors: Optional[int] = Field(description="number of processors per node", default=None)
+    num_gpus: Optional[int] = Field(description="number of GPUs per node", default=None)
     list_gpus: Optional[List[str]] = []
 
 
 class Constraints(Resources):
-    num_nodes: Optional[int] = Field(description="number of nodes")
+    num_nodes: Optional[int] = Field(description="number of nodes", default=None)
 
 
 class WorkerRequirements(Resources):
-    bank: Optional[str] = Field(description="bank/account")
-    timeout: Optional[float] = Field(description="time limit in minutes")
-    kwargs: Optional[dict]
+    bank: Optional[str] = Field(description="bank/account", default=None)
+    timeout: Optional[float] = Field(description="time limit in minutes", default=None)
+    kwargs: Optional[dict] = None
 
 
 class CompRequirements(WorkerRequirements):
-    num_nodes: Optional[int] = Field(description="number of nodes")
-    host_uid: Optional[str]
-    constraints: Optional[List[Constraints]]
+    num_nodes: Optional[int] = Field(description="number of nodes", default=None)
+    host_uid: Optional[str] = None
+    constraints: Optional[List[Constraints]] = None
 
 class ResourcesQuery(Resources):
     service_type: ServiceType
@@ -98,9 +98,9 @@ class BasicAsset(BaseModel):
     uid: str = DEFAULT_UID
     schema_version: str = SCHEMA_VERSION
     timestamps: TimeStamps = DEFAULT_TIMESTAMP
-    description: Optional[str] = Field(description='description')
-    error: Optional[str] = Field(description="error description")
-    terminate: Optional[bool] = Field(description="terminate")
+    description: Optional[str] = Field(description='description', default=None)
+    error: Optional[str] = Field(description="error description", default=None)
+    terminate: Optional[bool] = Field(description="terminate", default=None)
 
 
 class MlexJob(BasicAsset):
@@ -110,8 +110,8 @@ class MlexJob(BasicAsset):
     working_directory: str = Field(description="dataset uri")
     status: Status = DEFAULT_STATUS
     pid: str = DEFAULT_JOB_PID
-    requirements: Optional[Resources]
-    logs: Optional[str]
+    requirements: Optional[Resources] = None
+    logs: Optional[str] = None
     dependencies: List[str] = DEFAULT_UID_LIST
     class Config:
         extra = Extra.ignore
@@ -122,7 +122,7 @@ class MlexWorker(BasicAsset):
     host_uid: str = Field(description='remote MLExchange host identifier')
     status: Status = DEFAULT_STATUS
     jobs_list: List[str] = DEFAULT_UID_LIST
-    requirements: Optional[WorkerRequirements] = Field(description='computational requirements')
+    requirements: Optional[WorkerRequirements] = Field(description='computational requirements', default=None)
     dependencies: List[int] = []
     class Config:
         extra = Extra.ignore
@@ -141,4 +141,4 @@ class UserWorkflow(MlexWorkflow):
     job_list: List[MlexJob]
     dependencies: dict
     host_list: List[str] = Field(description='list of hostnames')
-    requirements: Optional[CompRequirements] = Field(description='computational requirements')
+    requirements: Optional[CompRequirements] = Field(description='computational requirements', default=None)

@@ -24,8 +24,6 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: '${MONGO_DB_PASSWORD}'
     depends_on:
       - 'mongo'
-    ports:
-      - '8080:8080'
 
   worker-launcher:
     restart: 'unless-stopped'
@@ -36,7 +34,6 @@ services:
     command: 'python3 src/worker_launcher.py'
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
-      - "./ml_worker:/app"
     environment:
       NUM_PROCESSORS: 2
       NETWORK: 'computing_api_default'
@@ -56,7 +53,7 @@ services:
       dockerfile: "docker/Dockerfile"
     command: "python frontend.py"
     ports:
-      - "8050:8050"
+      - "127.0.0.1:8050:8050"
     depends_on:
       - 'job-service'
 

@@ -22,11 +22,11 @@ def init_logging():
     logger.setLevel(JOB_MANAGER_LOG_LEVEL)
 
 
-config = Config(".env")
+config = Config()
 JOB_MANAGER_DB_NAME = config("JOB_MANAGER_DB_NAME", cast=str, default="job_manager")
 JOB_MANAGER_LOG_LEVEL = config("JOB_MANAGER_LOG_LEVEL", cast=str, default="INFO")
-MONGO_DB_USERNAME = str(os.environ['MONGO_INITDB_ROOT_USERNAME'], default="")
-MONGO_DB_PASSWORD = str(os.environ['MONGO_INITDB_ROOT_PASSWORD'], default="")
+MONGO_DB_USERNAME = os.getenv('MONGO_INITDB_ROOT_USERNAME', default="")
+MONGO_DB_PASSWORD = os.getenv('MONGO_INITDB_ROOT_PASSWORD', default="")
 MONGO_DB_URI = "mongodb://%s:%s@mongodb:27017/?authSource=admin" % (MONGO_DB_USERNAME, MONGO_DB_PASSWORD)
 
 API_URL_PREFIX = "/api/v0"
@@ -58,7 +58,7 @@ def set_compute_service(new_comp_svc: ComputeService):
 
 class ResponseModel(BaseModel):
     uid: str
-    flag: Optional[bool]
+    flag: Optional[bool] = None
 
 
 @app.post(API_URL_PREFIX + '/hosts', tags=['hosts'])
@@ -321,7 +321,7 @@ def get_next_job(worker_uid: str) -> MlexJob:
 
 
 @app.get(API_URL_PREFIX + '/private/workers', tags=['private'])
-def get_next_worker(service_type: str, host_uid: str = None) -> MlexWorker:
+def get_next_worker(service_type: str, host_uid: str = None) -> Optional[MlexWorker]:
     '''
     This function returns the next worker to be launched at host location and updates the status of this worker and the
     host resources in the database
